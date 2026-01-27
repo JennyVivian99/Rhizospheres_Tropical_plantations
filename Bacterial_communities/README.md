@@ -1,4 +1,4 @@
-Here is the code and metadata for the analysis of the fungal communities among the rhizospheres. 
+Here is the code and metadata for the analysis of the bacterial communities among the rhizospheres. 
 
 It is divided into:
 1) analysis of only the rhizospheres

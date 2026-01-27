@@ -189,7 +189,7 @@ path_results<-getwd()
 #Create the other objects that will be filled later
 seqtab.nochim = readRDS(paste0(path_results,"/seqtab.nochim.rds"))
 colnames(seqtab.nochim) <-md5(colnames(seqtab.nochim))
-taxa <- read.csv("Jenny_16S_taxa_DADA2.csv",header= TRUE, row.names=1) %>% as.matrix()
+taxa <- read.csv("NAME_OF_DADA2_FILE.csv",header= TRUE, row.names=1) %>% as.matrix()
 
 #Upload the table with the metadata
 Metadata<-read.table("Bacteria_Metadata.csv",h=T,sep=",", row.names = 1)
@@ -373,3 +373,4 @@ total_sequence_reads <- sum(otu_counts)
 total_sequence_reads
 num_asvs <- ntaxa(ps_rarefiedBulkRhizo10YO)
 num_asvs
+

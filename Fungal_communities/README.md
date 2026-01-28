@@ -6,4 +6,4 @@ It is divided into:
 4) analysis of all rhizospheres and bulk topsoil samples together
 5) analysis of samples of the bulk topsoil
 
-Raw sequence reads on the topsoil were deposited in the NCBI Short Read Archive under the BioProject ID and accession number PRJNA1295595, while raw reads of the rhizosphere can be accessed through PRJNA1302026
+Raw sequence reads on the topsoil were deposited in the NCBI Short Read Archive under the BioProject ID and accession number PRJNA1295595, while raw reads of the rhizosphere can be accessed through PRJNA1302026.

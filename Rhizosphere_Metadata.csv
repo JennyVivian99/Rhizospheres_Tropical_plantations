@@ -1,0 +1,22 @@
+Sample code,Bacteria_Sample,Fungi_Sample,Plant_Species,Latitude,Longitude,Hill_Side,DBH_cm,H_m,Date,Photo time,Location
+M1,USC-24-01-199,USC-24-01-218,Acacia mangium,11.6 N,124.5 E,N,8.9,6.1,10/09/2024,NA,2-year-old plantation
+M2,USC-24-01-200,USC-24-01-219,Acacia mangium,11.6 N,124.5 E,S,3.5,3.1,10/09/2024,NA,2-year-old plantation
+M3,USC-24-01-201,USC-24-01-220,Acacia mangium,11.6 N,124.5 E,N,2.2,2.5,10/09/2024,11:41,2-year-old plantation
+M4,USC-24-01-25,USC-24-01-121,Acacia mangium,11.6 N,124.5 E,S,38.6,32.2,13/09/2024,9:12,10-year-old plantation
+M5,USC-24-01-26,USC-24-01-122,Acacia mangium,11.6 N,124.5 E,S,0.7,1.5,13/09/2024,9:21,10-year-old plantation
+M6,USC-24-01-27,USC-24-01-123,Acacia mangium,11.6 N,124.5 E,S,30.9,18.6,13/09/2024,NA,10-year-old plantation
+S1,USC-24-01-15,USC-24-01-111,Saccarum spp.,11.6 N,124.5 E,N,NA,NA,10/09/2024,NA,2-year-old plantation
+S2,USC-24-01-16,USC-24-01-112,Saccarum spp.,11.6 N,124.5 E,S,NA,NA,10/09/2024,11:17,2-year-old plantation
+S3,USC-24-01-17,USC-24-01-113,Saccarum spp.,11.6 N,124.5 E,N,NA,NA,10/09/2024,11:47,2-year-old plantation
+IM1,USC-24-01-92,USC-24-01-188,Imperata cylindrica,11.6 N,124.5 E,N,NA,NA,10/09/2024,NA,2-year-old plantation
+IM2,USC-24-01-93,USC-24-01-189,Imperata cylindrica,11.6 N,124.5 E,S,NA,NA,10/09/2024,11:27,2-year-old plantation
+IM3,USC-24-01-94,USC-24-01-190,Imperata cylindrica,11.6 N,124.5 E,N,NA,NA,10/09/2024,11:44,2-year-old plantation
+C1,USC-24-01-85,USC-24-01-181,Coccus nucifera,11.6 N,124.5 E,N,25.2,11,10/09/2024,NA,2-year-old plantation
+C2,USC-24-01-86,USC-24-01-182,Coccus nucifera,11.6 N,124.5 E,S,31.3,11.4,10/09/2024,NA,2-year-old plantation
+C3,USC-24-01-87,USC-24-01-183,Coccus nucifera,11.6 N,124.5 E,N,28,11.5,10/09/2024,11:36,2-year-old plantation
+MH1,USC-24-01-51,USC-24-01-147,Mahogany (Swietenia macrophylla),11.6 N,124.5 E,S,8.6,8.3,13/09/2024,NA,10-year-old plantation
+MH2,USC-24-01-52,USC-24-01-148,Mahogany (Swietenia macrophylla),11.6 N,124.5 E,S,4,6,13/09/2024,NA,10-year-old plantation
+MH3,USC-24-01-53,USC-24-01-149,Mahogany (Swietenia macrophylla),11.6 N,124.5 E,S,4,7.8,13/09/2024,NA,10-year-old plantation
+N1,USC-24-01-63,USC-24-01-159,Narra (Pterocarpus indicus),11.6 N,124.5 E,S,<0.5,0.9,13/09/2024,9:43,10-year-old plantation
+N2,USC-24-01-64,USC-24-01-160,Narra (Pterocarpus indicus),11.6 N,124.5 E,S,0.5,1.8,13/09/2024,9:48,10-year-old plantation
+N3,USC-24-01-65,USC-24-01-161,Narra (Pterocarpus indicus),11.6 N,124.5 E,S,0.5,1.75,13/09/2024,9:57,10-year-old plantation

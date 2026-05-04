@@ -1,7 +1,5 @@
-# # # Fungi analyses # # # 
-
+# # # Bacteria analyses # # # 
 #### Packages installations ####
-
 # Required packages for taxonomy analysis
 # if (!requireNamespace("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 # BiocManager::install(c("phyloseq", "microbiome", "ComplexHeatmap"), update = FALSE)
@@ -170,10 +168,11 @@ library("randomForest")
 library("gridExtra")
 library("multiROC")
 library("ranger")
+library("meconetcomp")
 
 #### Load libraries for other stat ####
 
-library(metagMisc)
+library(metagMisc) #Hill numbers
 
 #### GitHub Reference Tutorial Microeco ####
 
@@ -186,46 +185,42 @@ library(metagMisc)
 # Select the folder in which the taxonomic assignment is located
 # Assign this location to path_results
 path_results<-getwd()
-# Create the other objects that will be filled later
+#Note that this time I uploaded a CSV object (which do not need to change in ASVs as RDS object, see difference with ITS)
+#Create the other objects that will be filled later
 seqtab.nochim = readRDS(paste0(path_results,"/seqtab.nochim.rds"))
-taxa=readRDS(paste0(path_results,"/taxaUNITE.rds"))
-rownames(taxa) <-openssl::md5(rownames(taxa))
-# Upload the table with the metadata
-Metadata<-read.table("Fungi_Metadata.csv",h=T,sep=",",row.names = 1)
-Metadata
-# Save the sequences. Create a DNAStringSet from the ASVs
-dna <- readDNAStringSet(paste0(path_results,"/uniqueSeqs.fasta"))
-# Check the presence of the sequences in the dna file
-dna
-# Creation of Phyloseq object for the analysis
 colnames(seqtab.nochim) <-md5(colnames(seqtab.nochim))
-ps_run<-phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE),sample_data(Metadata),tax_table(taxa),refseq(dna))
-# Check the object
+taxa <- read.csv("Jenny_16S_taxa_DADA2.csv",header= TRUE, row.names=1) %>% as.matrix()
+
+#Upload the table with the metadata
+Metadata<-read.table("Bacteria_Metadata.csv",h=T,sep=",", row.names = 1)
+#Save the sequences. Create a DNAStringSet from the ASVs
+dna <- readDNAStringSet(paste0(path_results,"/uniqueSeqs.fasta"))
+#Check the presence of the sequences in the dna file
+dna
+#Creation of Phyloseq object for the analysis
+ps_run<-phyloseq(otu_table(seqtab.nochim, taxa_are_rows=F),sample_data(Metadata),tax_table(taxa),refseq(dna))
+#Check the object
 ps_run
-# May emerge error if run too many things altogether
-# Save the phyloseq object
+#Save the phyloseq object
 saveRDS(ps_run, file = paste0(path_results,"/ps_run.rds"))
-# Prepare the ASVs table for output  
+#Prepare the ASVs table for output  
 otab = pstoveg_otu(ps_run) %>% t() %>% as.data.frame()
 otab = cbind(ASVs = rownames(otab), otab)
 write.table(otab, paste0(path_results,"/dada_table.txt"),quote=FALSE,sep="\t", row.names = FALSE)
-# Save taxonomy table
+#Save taxonomy table
 taxa = cbind(ASVs = rownames(taxa), taxa)
 write.table(taxa, paste0(path_results,"/tax_table.txt"),quote=FALSE,sep="\t", row.names = F)
-
-# Optional (requires some time to load):
-# Plot the table (before filtering the data). Fill can be changed into Family, Order, Species, ...
-# plot_bar(ps_run, fill="Phylum", merge)
-
-# Allocation of objects for analyses
+#Optional (requires some time to load):
+#Plot the table (before filtering the data). Fill can be changed into Family, Order, Species, ...
+#plot_bar(ps_run, fill="Phylum", merge)
+#Allocation of objects for analyses
 asv_counts <- as.matrix(otu_table(ps_run))
 total_sequence_reads <- sum(asv_counts)
-# Check
+#Check
 total_sequence_reads
 num_asvs <- ntaxa(ps_run)
-# Check
+#Check
 num_asvs
-
 
 #### Addressing contamination in experimental design ####
 
@@ -256,55 +251,54 @@ final_num_asvs
 # OTU table, Taxa table, and others are stored in the phyloseq object
 # Total
 ps_Final <- subset_samples(ps_DE, amplicon_type == "sample")
-# Different landcover types (Main project (MPJ) for the thesis)
+# Different Landcover types (Main project (MPJ) for the thesis)
 ps_MainPJ <- subset_samples(ps_DE, ProjectFocus == "Field")
 # Rhizosphere (RZ)
 ps_Rhizosphere <- subset_samples(ps_DE, ProjectFocus == "Rhizosphere")
 
 #### Processing sample-rarefying for each of the working dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
-# (done for Main Project)
+# (done for Rhizosphere)
 # orders samples from highest to lowest
 sample_sums(ps_Rhizosphere)[order(sample_sums(ps_Rhizosphere))]
 # Observe the number of reads, retain the minimum number similar to others (eg. if present 
 # 18-490-23897-23786-[], retain 23897).
-# We see that the sample 221 and 186 have really low reads. To discard. They are from R1SB (just 18 reads), and 
-# from R1SA (481 reads)
-# The lowest number after them is 24803, which I will retain as minimum
-# To display the plots to recognize better were to cut:
-asv_before_MainPJ <- as(otu_table(ps_Rhizosphere), "matrix")
-out<-vegan::rarecurve(asv_before_MainPJ, step=100,lwd=2, ylab="ASV Richness", xlab="Sequence Sample Size", main="INSERT_GENE_TARGET rRNA", label=F)
+# We see that they are more or less the same numbers, so I do not discard samples
+# Look at the plot of the rarefaction curves
+asv_before_RZ <- as(otu_table(ps_Rhizosphere), "matrix")
+out<-vegan::rarecurve(t(asv_before_RZ), step=100,lwd=2, ylab="ASV Richness", xlab="Sequence Sample Size", main="INSERT_GENE_TARGET rRNA", label=F)
 # Set seed to reproduce the data, since the rarefaction will sample
 set.seed(100)
-# Rarefy the samples without replacement. 
-# Rarefaction is used to simulate an even number of reads per sample. 
-ps_rarefiedMPJ <- rarefy_even_depth(ps_Rhizosphere, sample.size =   24803 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+# Rarefy the samples without replacement. Now I write the lowest number of the ASVs sequences
+# to retain them all, or just don't trim
+# Rarefaction is used to simulate an even number of reads per sample 
+ps_rarefiedRZ <- rarefy_even_depth(ps_Rhizosphere, sample.size =   30470, replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
 # Allocation of objects after rarefying
-asv_counts_rarefiedMPJ <- as.matrix(otu_table(ps_rarefiedMPJ))
-After_rar_sequence_readsMPJ <- sum(asv_counts_rarefiedMPJ)
-After_rar_sequence_readsMPJ
+asv_counts_rarefiedRZ <- as.matrix(otu_table(ps_rarefiedRZ))
+After_rar_sequence_readsRZ <- sum(asv_counts_rarefiedRZ)
+After_rar_sequence_readsRZ
 # Taxa
-after_rar_num_asvsMPJ<- ntaxa(ps_rarefiedMPJ)
-after_rar_num_asvsMPJ
+after_rar_num_asvsRZ<- ntaxa(ps_rarefiedRZ)
+after_rar_num_asvsRZ
 # Check
-summarize_phyloseq(ps_rarefiedMPJ)
-ps_rarefiedMPJ
+summarize_phyloseq(ps_rarefiedRZ)
+sample_sums(ps_rarefiedRZ)[order(sample_sums(ps_rarefiedRZ))]
+ps_rarefiedRZ
 # Check the structure
-str(sample_data(ps_rarefiedMPJ))
+str(sample_data(ps_rarefiedRZ))
 # Dataset to use from now:
-ps_rarefiedMPJ
+ps_rarefiedRZ
 
 #### Summary of the list of taxa ####
-
-# (for Main Project)
+# (for Rhizosphere)
 # List of taxonomic ranks
-rank_names(ps_rarefiedMPJ)
+rank_names(ps_rarefiedRZ)
 taxonomic_ranks <- c("Kingdom","Phylum","Class","Order","Family","Genus","Species")
 # Initialize a list to store counts for each rank
 taxa_counts <- list()
 # Loop through the taxonomic ranks and calculate counts
 for (rank in taxonomic_ranks) {
-  glommed_ps <- ps_rarefiedMPJ %>%
+  glommed_ps <- ps_rarefiedRZ %>%
     tax_glom(taxrank = rank)
   taxa_count <- ntaxa(glommed_ps)
   taxa_counts[[rank]] <- taxa_count
@@ -314,42 +308,115 @@ for (rank in taxonomic_ranks) {
   cat("Number of", rank, ":", taxa_counts[[rank]], "\n")
 }
 
-#### MICROECO Analysis ####
+# For publications is useful:
+otu_counts <- as.matrix(otu_table(ps_rarefiedRZ))
+total_sequence_reads <- sum(otu_counts)
+total_sequence_reads
+num_asvs <- ntaxa(ps_rarefiedRZ)
+num_asvs
+#Slightly lower the number of reads nd ASVs in microeco object. Retained the microeco numbers in publication.
 
+#### Number of sequences and ASVs for each veg species ####
+# Acacia mangiumY: of 2 years old
+ps_RhizoAcaciaY <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Acacia mangiumY")
+ps_RhizoAcaciaY
+AMYotu_counts <- as.matrix(otu_table(ps_RhizoAcaciaY))
+AMYtotal_sequence_reads <- sum(AMYotu_counts)
+AMYtotal_sequence_reads
+AMYnum_asvs <- ntaxa(ps_RhizoAcaciaY)
+AMYnum_asvs
+
+# Acacia mangiumO; of 10 years old
+ps_RhizoAcaciaO <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Acacia mangiumO")
+ps_RhizoAcaciaO
+AMOotu_counts <- as.matrix(otu_table(ps_RhizoAcaciaO))
+AMOtotal_sequence_reads <- sum(AMOotu_counts)
+AMOtotal_sequence_reads
+AMOnum_asvs <- ntaxa(ps_RhizoAcaciaO)
+AMOnum_asvs
+
+# Saccharum spp
+ps_RhizoSac <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Saccharum spp.")
+ps_RhizoSac
+Sacotu_counts <- as.matrix(otu_table(ps_RhizoSac))
+Sactotal_sequence_reads <- sum(Sacotu_counts)
+Sactotal_sequence_reads
+Sacnum_asvs <- ntaxa(ps_RhizoSac)
+Sacnum_asvs
+
+# Mahogany (Swietenia macrophylla)
+ps_RhizoMah <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Mahogany (Swietenia macrophylla)")
+ps_RhizoMah
+Mahotu_counts <- as.matrix(otu_table(ps_RhizoMah))
+Mahtotal_sequence_reads <- sum(Mahotu_counts)
+Mahtotal_sequence_reads
+Mahnum_asvs <- ntaxa(ps_RhizoMah)
+Mahnum_asvs
+
+# Narra (Pterocarpus indicus)
+ps_RhizoNarra <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Narra (Pterocarpus indicus)")
+ps_RhizoNarra
+Narraotu_counts <- as.matrix(otu_table(ps_RhizoNarra))
+Narratotal_sequence_reads <- sum(Narraotu_counts)
+Narratotal_sequence_reads
+Narranum_asvs <- ntaxa(ps_RhizoNarra)
+Narranum_asvs
+
+# Coccus nucifera
+ps_RhizoCoccus <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Coccus nucifera")
+ps_RhizoCoccus
+Coccusotu_counts <- as.matrix(otu_table(ps_RhizoCoccus))
+Coccustotal_sequence_reads <- sum(Coccusotu_counts)
+Coccustotal_sequence_reads
+Coccusnum_asvs <- ntaxa(ps_RhizoCoccus)
+Coccusnum_asvs
+
+# Imperata cylindrica
+ps_RhizoImper <- subset_samples(ps_rarefiedRZ, Rhizosphere == "Imperata cylindrica")
+ps_RhizoImper
+Imperotu_counts <- as.matrix(otu_table(ps_RhizoImper))
+Impertotal_sequence_reads <- sum(Imperotu_counts)
+Impertotal_sequence_reads
+Impernum_asvs <- ntaxa(ps_RhizoImper)
+Impernum_asvs
+
+#### MICROECO Analysis ####
 # Convert the dataset to work in microeco, convert the phyloseq file
-meco_datasetMPJ <- phyloseq2meco(ps_rarefiedMPJ)
+meco_datasetRZ <- phyloseq2meco(ps_rarefiedRZ)
 # check
-meco_datasetMPJ
+meco_datasetRZ
 # remove ASVs which are not assigned in the Kingdom of interest (even if not expected), and should not be present
 # use R subset function to filter taxa in tax_table
-meco_datasetMPJ$tax_table %<>% base::subset(Kingdom == "k__Fungi")
+meco_datasetRZ$tax_table %<>% base::subset(Kingdom == "k__Bacteria")
 # another way with grepl function
-# meco_datasetMPJ$tax_table %<>% .[grepl("Fungi", .$Kingdom), ]
+# meco_datasetRZ$tax_table %<>% .[grepl("Fungi", .$Kingdom), ]
 # Check the result
-meco_datasetMPJ
+meco_datasetRZ
 # If I want to remove others:
-# meco_datasetMPJ$filter_pollution(taxa = c("INSERTNAME", "E.G.-->chloroplast"))
+# meco_datasetRZ$filter_pollution(taxa = c("INSERTNAME", "E.G.-->chloroplast"))
 # To make the ASVs and sample information consistent across all files in the object:
-meco_datasetMPJ$tidy_dataset()
+meco_datasetRZ$tidy_dataset()
 # check
-meco_datasetMPJ
+meco_datasetRZ
 # sample_sums() to check the sequence numbers in each sample
-meco_datasetMPJ$sample_sums() %>% range
+meco_datasetRZ$sample_sums() %>% range
 # function save_table can be performed to save all the basic data in microtable object to local files, including feature abundance, metadata, taxonomic table, phylogenetic tree and representative sequences.
-meco_datasetMPJ$save_table(dirpath = "basic_files", sep = ",")
+meco_datasetRZ$save_table(dirpath = "basic_files", sep = ",")
+total_sequences <- sum(meco_datasetRZ$otu_table)
+print(total_sequences)
 
 #### Taxa abundance calculation ####
 # Calculate the taxa abundance at each taxonomic rank using cal_abund(). 
 # This function generate a list called taxa_abund stored in the microtable object. 
 # This list contains several data frame of the abundance information at each taxonomic rank.
 # default parameter (rel = TRUE) denotes relative abundance
-meco_datasetMPJ$cal_abund()
+meco_datasetRZ$cal_abund()
 # return taxa_abund list in the object
-class(meco_datasetMPJ$taxa_abund)
+class(meco_datasetRZ$taxa_abund)
 # show part of the relative abundance at Phylum level
-meco_datasetMPJ$taxa_abund$Phylum[1:5, 1:5]
+meco_datasetRZ$taxa_abund$Phylum[1:5, 1:5]
 # The function save_abund() can be used to save the taxa abundance file to a local place easily.
-meco_datasetMPJ$save_abund(dirpath = "taxa_abund")
+meco_datasetRZ$save_abund(dirpath = "taxa_abund")
 
 #### Dataset manipulation ####
 
@@ -362,35 +429,36 @@ meco_datasetMPJ$save_abund(dirpath = "taxa_abund")
 #### Alpha diversity calculation ####
 # To add Faith's phylogenetic diversity, use PD = TRUE, this will be a little slow, and the tree has to be provided
 # If not specified, different indexes of diversity are calculated
-meco_datasetMPJ$cal_alphadiv(PD = F)
+meco_datasetRZ$cal_alphadiv(PD = F)
 # return alpha_diversity in the object
-class(meco_datasetMPJ$alpha_diversity)
+class(meco_datasetRZ$alpha_diversity)
 # save alpha_diversity to a directory
-meco_datasetMPJ$save_alphadiv(dirpath = "alpha_diversity")
+meco_datasetRZ$save_alphadiv(dirpath = "alpha_diversity")
 # See levels
-meco_datasetMPJ$sample_table$Landcover
-# Relevel
-meco_datasetMPJ$sample_table$Landcover <- factor(meco_datasetMPJ$sample_table$Landcover, levels = c("Grassland", "TwoYearsOld", "TenYearsold",
-                                                                                                    "TwentyfourYearsold", "Remnant")) 
+meco_datasetRZ$sample_table$Rhizosphere 
 # Creating a trans_alpha object can return two data.frame with the prefix ‘data_’: 
 # data_alpha and data_stat. data_alpha is used for subsequent differential test 
 # and visualization.
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ, group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ, group = "Rhizosphere")
 t1$data_alpha
 # Save table alpha diversity with ASV counts, number of ASVs for each sample
-write.csv(t1$data_alpha, "alpha_landcover.csv", row.names = TRUE)
+write.csv(t1$data_alpha, "alpha_Rhizosphere.csv", row.names = TRUE)
 # return t1$data_stat
 head(t1$data_stat)
 t1$data_stat
 # Then, we test the differences among groups using Kruskal-Wallis Rank Sum Test (overall test when groups > 2),
 # Wilcoxon Rank Sum Tests (for paired groups), 
 # Dunn’s Kruskal-Wallis Multiple Comparisons (for paired groups when groups > 2) and Anova with multiple comparisons.
+# Normality check
+shapiro.test(t1$data_alpha$Value[t1$data_alpha$Measure=="Observed"]) # Normal
+# Test kruskal wallis
 t1$cal_diff(method = "KW")
 #  return t1$res_diff
 head(t1$res_diff)
 t1$cal_diff(method = "KW_dunn")
 #  return t1$res_diff
 head(t1$res_diff)
+t1$res_diff
 # The result is stored in object$res_diff
 # more options
 t1$cal_diff(method = "KW_dunn", KW_dunn_letter = FALSE)
@@ -399,317 +467,369 @@ t1$cal_diff(method = "wilcox")
 head(t1$res_diff)
 # t1$cal_diff(method = "t.test")
 # head(t1$res_diff)
-# Try anova
-t1$cal_diff(method = "anova")
+# Try KW_dunn
+t1$cal_diff(method = "KW_dunn")
+t1$res_diff
 t1$data_stat
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
-# Further Post hoc analyses to implement if significant results from ANOVA,
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")+labs(title="Bacteria ASVs richness")
+# Further Post hoc analyses to implement if significant results from KW_dunn, and normality check passed
 # for e.g. duncan.test
 # The multi-factor analysis of variance is also supported with the formula parameter, such as two-way anova.
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ, group = "Landcover")
-t1$cal_diff(method = "anova", formula = "Landcover+Hill__side")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ, group = "Rhizosphere")
+t1$cal_diff(method = "KW_dunn", formula = "Rhizosphere+Hill__side")
 head(t1$res_diff)
 # see the help document for the usage of formula
 
 #### Hills numbers calculation ####
-phyloseq_inext(ps_rarefiedMPJ)
+phyloseq_inext                 
 
 #### Alpha diversity calculation at higher taxonomic level ####
 # Aggregate to Genus level
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ$merge_taxa("Genus"), group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ$merge_taxa("Genus"), group = "Rhizosphere")
 t1$data_alpha
-# Try anova
-t1$cal_diff(method = "anova")
+# Try KW_dunn
+t1$cal_diff(method = "KW_dunn")
 head(t1$res_diff)
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")
 # Aggregate to Family level
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ$merge_taxa("Family"), group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ$merge_taxa("Family"), group = "Rhizosphere")
 t1$data_alpha
-# Try anova
-t1$cal_diff(method = "anova")
+# Try KW_dunn
+t1$cal_diff(method = "KW_dunn")
 head(t1$res_diff)
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")
 # Aggregate to Order level
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ$merge_taxa("Order"), group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ$merge_taxa("Order"), group = "Rhizosphere")
 t1$data_alpha
-# Try anova
-t1$cal_diff(method = "anova")
+# Try KW_dunn
+t1$cal_diff(method = "KW_dunn")
 head(t1$res_diff)
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")
 # Aggregate to Class level
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ$merge_taxa("Class"), group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ$merge_taxa("Class"), group = "Rhizosphere")
 t1$data_alpha
-# Try anova
-t1$cal_diff(method = "anova")
+# Try KW_dunn
+t1$cal_diff(method = "KW_dunn")
 head(t1$res_diff)
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")
 # Aggregate to Phylum level
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ$merge_taxa("Phylum"), group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ$merge_taxa("Phylum"), group = "Rhizosphere")
 t1$data_alpha
-# Try anova
-t1$cal_diff(method = "anova")
+t1$data_stat
+# Try KW_dunn
+t1$cal_diff(method = "KW_dunn")
 head(t1$res_diff)
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")+labs(title="Bacteria Phylum richness")
 
-#### Alpha diversity within each landcover type ####
+#### Alpha diversity within each Rhizosphere ####
 # ASVs
-# Grassland
+# Saccharum spp.
 # remember first clone the whole dataset
-group_Grass <- clone(meco_datasetMPJ)
-# select 'Grassland'
-group_Grass$sample_table <- subset(group_Grass$sample_table, Landcover == "Grassland")
+group_Sacc <- clone(meco_datasetRZ)
+# select 'Saccharum'
+group_Sacc$sample_table <- subset(group_Sacc$sample_table, Rhizosphere == "Saccharum spp.")
 # trim all the data
-group_Grass$tidy_dataset()
+group_Sacc$tidy_dataset()
 # Check
-group_Grass
+group_Sacc
 # Extract numeric parts (transect) and create grouping factor
-group_Grass$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_Grass$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_Grass$sample_table$Numeric_Group[is.na(group_Grass$sample_table$Numeric_Group)] <- 0
-group_Grass$sample_table$Numeric_Group <- factor(group_Grass$sample_table$Numeric_Group)
+group_Sacc$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_Sacc$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_Sacc$sample_table$Numeric_Group[is.na(group_Sacc$sample_table$Numeric_Group)] <- 0
+group_Sacc$sample_table$Numeric_Group <- factor(group_Sacc$sample_table$Numeric_Group)
 # Check
-group_Grass$sample_table$Numeric_Group
+group_Sacc$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_Grass<- trans_alpha$new(dataset = group_Grass, group = "Numeric_Group")
+group_Sacc<- trans_alpha$new(dataset = group_Sacc, group = "Numeric_Group")
 # See
-group_Grass$data_alpha
-# Try anova
-group_Grass$cal_diff(method = "anova")
-group_Grass$res_diff
+group_Sacc$data_alpha
+# Do KW_dunn
+group_Sacc$cal_diff(method = "KW_dunn")
+group_Sacc$res_diff
 # Plot
-group_Grass$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_Sacc$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-# Two Years Old
+# Acacia mangium
 # remember first clone the whole dataset
-group_2YO <- clone(meco_datasetMPJ)
+group_AM <- clone(meco_datasetRZ)
 # select 'Two Years Old'
-group_2YO$sample_table <- subset(group_2YO$sample_table, Landcover == "TwoYearsOld")
+group_AM$sample_table <- subset(group_AM$sample_table, Rhizosphere == "Acacia mangium")
 # trim all the data
-group_2YO$tidy_dataset()
+group_AM$tidy_dataset()
 # Check
-group_2YO
+group_AM
 # Extract numeric parts (transect) and create grouping factor
-group_2YO$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_2YO$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_2YO$sample_table$Numeric_Group[is.na(group_2YO$sample_table$Numeric_Group)] <- 0
-group_2YO$sample_table$Numeric_Group <- factor(group_2YO$sample_table$Numeric_Group)
+group_AM$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_AM$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_AM$sample_table$Numeric_Group[is.na(group_AM$sample_table$Numeric_Group)] <- 0
+group_AM$sample_table$Numeric_Group <- factor(group_AM$sample_table$Numeric_Group)
 # Check
-group_2YO$sample_table$Numeric_Group
+group_AM$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_2YO<- trans_alpha$new(dataset = group_2YO, group = "Numeric_Group")
+group_AM<- trans_alpha$new(dataset = group_AM, group = "Numeric_Group")
 # See
-group_2YO$data_alpha
-# Try anova
-group_2YO$cal_diff(method = "anova")
-group_2YO$res_diff
+group_AM$data_alpha
+# Do KW_dunn
+group_AM$cal_diff(method = "KW_dunn")
+group_AM$res_diff
 # Plot
-group_2YO$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_AM$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-
-# Ten Years Old
+# Mahogany (Swietenia macrophylla)
 # remember first clone the whole dataset
-group_10YO <- clone(meco_datasetMPJ)
+group_MH <- clone(meco_datasetRZ)
 # select 'Two Years Old'
-group_10YO$sample_table <- subset(group_10YO$sample_table, Landcover == "TenYearsold")
+group_MH$sample_table <- subset(group_MH$sample_table, Rhizosphere == "Mahogany (Swietenia macrophylla)")
 # trim all the data
-group_10YO$tidy_dataset()
+group_MH$tidy_dataset()
 # Check
-group_10YO
+group_MH
 # Extract numeric parts (transect) and create grouping factor
-group_10YO$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_10YO$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_10YO$sample_table$Numeric_Group[is.na(group_10YO$sample_table$Numeric_Group)] <- 0
-group_10YO$sample_table$Numeric_Group <- factor(group_10YO$sample_table$Numeric_Group)
+group_MH$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_MH$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_MH$sample_table$Numeric_Group[is.na(group_MH$sample_table$Numeric_Group)] <- 0
+group_MH$sample_table$Numeric_Group <- factor(group_MH$sample_table$Numeric_Group)
 # Check
-group_10YO$sample_table$Numeric_Group
+group_MH$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_10YO<- trans_alpha$new(dataset = group_10YO, group = "Numeric_Group")
+group_MH<- trans_alpha$new(dataset = group_MH, group = "Numeric_Group")
 # See
-group_10YO$data_alpha
-# Try anova
-group_10YO$cal_diff(method = "anova")
-group_10YO$res_diff
+group_MH$data_alpha
+# Do KW_dunn
+group_MH$cal_diff(method = "KW_dunn")
+group_MH$res_diff
 # Plot
-group_10YO$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_MH$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-# TwentyfourYearsold
+# Narra (Pterocarpus indicus)
 # remember first clone the whole dataset
-group_24YO <- clone(meco_datasetMPJ)
+group_N <- clone(meco_datasetRZ)
+# select 'Narra (Pterocarpus indicus)'
+group_N$sample_table <- subset(group_N$sample_table, Rhizosphere == "Narra (Pterocarpus indicus)")
+# trim all the data
+group_N$tidy_dataset()
+# Check
+group_N
+# Extract numeric parts (transect) and create grouping factor
+group_N$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_N$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_N$sample_table$Numeric_Group[is.na(group_N$sample_table$Numeric_Group)] <- 0
+group_N$sample_table$Numeric_Group <- factor(group_N$sample_table$Numeric_Group)
+# Check
+group_N$sample_table$Numeric_Group
+# Calculate alpha diversity at ASVs level
+group_N<- trans_alpha$new(dataset = group_N, group = "Numeric_Group")
+# See
+group_N$data_alpha
+# Do KW_dunn
+group_N$cal_diff(method = "KW_dunn")
+group_N$res_diff
+# Plot
+group_N$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+
+# Coccus nucifera
+# remember first clone the whole dataset
+group_C <- clone(meco_datasetRZ)
+# select 'Coccus nucifera'
+group_C$sample_table <- subset(group_C$sample_table, Rhizosphere == "Coccus nucifera")
+# trim all the data
+group_C$tidy_dataset()
+# Check
+group_C
+# Extract numeric parts (transect) and create grouping factor
+group_C$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_C$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_C$sample_table$Numeric_Group[is.na(group_C$sample_table$Numeric_Group)] <- 0
+group_C$sample_table$Numeric_Group <- factor(group_C$sample_table$Numeric_Group)
+# Check
+group_C$sample_table$Numeric_Group
+# Calculate alpha diversity at ASVs level
+group_C<- trans_alpha$new(dataset = group_C, group = "Numeric_Group")
+# See
+group_C$data_alpha
+# Do KW_dunn
+group_C$cal_diff(method = "KW_dunn")
+group_C$res_diff
+# Plot
+group_C$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+
+# Imperata cylindrica
+# remember first clone the whole dataset
+group_IC <- clone(meco_datasetRZ)
+# select 'Coccus nucifera'
+group_IC$sample_table <- subset(group_IC$sample_table, Rhizosphere == "Imperata cylindrica")
+# trim all the data
+group_IC$tidy_dataset()
+# Check
+group_IC
+# Extract numeric parts (transect) and create grouping factor
+group_IC$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_IC$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_IC$sample_table$Numeric_Group[is.na(group_IC$sample_table$Numeric_Group)] <- 0
+group_IC$sample_table$Numeric_Group <- factor(group_IC$sample_table$Numeric_Group)
+# Check
+group_IC$sample_table$Numeric_Group
+# Calculate alpha diversity at ASVs level
+group_IC<- trans_alpha$new(dataset = group_IC, group = "Numeric_Group")
+# See
+group_IC$data_alpha
+# Do KW_dunn
+group_IC$cal_diff(method = "KW_dunn")
+group_IC$res_diff
+# Plot
+group_IC$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+
+#### Alpha diversity Phylum level for each Rhizosphere ####
+# Saccharum spp.
+# remember first clone the whole dataset
+group_Sacc <- clone(meco_datasetRZ)
+# select 'Saccharum'
+group_Sacc$sample_table <- subset(group_Sacc$sample_table, Rhizosphere == "Saccharum spp.")
+# trim all the data
+group_Sacc$tidy_dataset()
+# Check
+group_Sacc
+# Extract numeric parts (transect) and create grouping factor
+group_Sacc$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_Sacc$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_Sacc$sample_table$Numeric_Group[is.na(group_Sacc$sample_table$Numeric_Group)] <- 0
+group_Sacc$sample_table$Numeric_Group <- factor(group_Sacc$sample_table$Numeric_Group)
+# Check
+group_Sacc$sample_table$Numeric_Group
+# Calculate alpha diversity at ASVs level
+group_Sacc<- trans_alpha$new(dataset = group_Sacc$merge_taxa('Phylum'), group = "Numeric_Group")
+# See
+group_Sacc$data_alpha
+# Do KW_dunn
+group_Sacc$cal_diff(method = "KW_dunn")
+group_Sacc$res_diff
+# Plot
+group_Sacc$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+
+# Acacia mangium
+# remember first clone the whole dataset
+group_AM <- clone(meco_datasetRZ)
 # select 'Two Years Old'
-group_24YO$sample_table <- subset(group_24YO$sample_table, Landcover == "TwentyfourYearsold")
+group_AM$sample_table <- subset(group_AM$sample_table, Rhizosphere == "Acacia mangium")
 # trim all the data
-group_24YO$tidy_dataset()
+group_AM$tidy_dataset()
 # Check
-group_24YO
+group_AM
 # Extract numeric parts (transect) and create grouping factor
-group_24YO$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_24YO$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_24YO$sample_table$Numeric_Group[is.na(group_24YO$sample_table$Numeric_Group)] <- 0
-group_24YO$sample_table$Numeric_Group <- factor(group_24YO$sample_table$Numeric_Group)
+group_AM$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_AM$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_AM$sample_table$Numeric_Group[is.na(group_AM$sample_table$Numeric_Group)] <- 0
+group_AM$sample_table$Numeric_Group <- factor(group_AM$sample_table$Numeric_Group)
 # Check
-group_24YO$sample_table$Numeric_Group
+group_AM$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_24YO<- trans_alpha$new(dataset = group_24YO, group = "Numeric_Group")
+group_AM<- trans_alpha$new(dataset = group_AM$merge_taxa('Phylum'), group = "Numeric_Group")
 # See
-group_24YO$data_alpha
-# Try anova
-group_24YO$cal_diff(method = "anova")
-group_24YO$res_diff
+group_AM$data_alpha
+# Do KW_dunn
+group_AM$cal_diff(method = "KW_dunn")
+group_AM$res_diff
 # Plot
-group_24YO$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_AM$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-# Remnant
+
+# Mahogany (Swietenia macrophylla)
 # remember first clone the whole dataset
-group_Remnant <- clone(meco_datasetMPJ)
+group_MH <- clone(meco_datasetRZ)
 # select 'Two Years Old'
-group_Remnant$sample_table <- subset(group_Remnant$sample_table, Landcover == "Remnant")
+group_MH$sample_table <- subset(group_MH$sample_table, Rhizosphere == "Mahogany (Swietenia macrophylla)")
 # trim all the data
-group_Remnant$tidy_dataset()
+group_MH$tidy_dataset()
 # Check
-group_Remnant
+group_MH
 # Extract numeric parts (transect) and create grouping factor
-group_Remnant$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_Remnant$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_Remnant$sample_table$Numeric_Group[is.na(group_Remnant$sample_table$Numeric_Group)] <- 0
-group_Remnant$sample_table$Numeric_Group <- factor(group_Remnant$sample_table$Numeric_Group)
+group_MH$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_MH$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_MH$sample_table$Numeric_Group[is.na(group_MH$sample_table$Numeric_Group)] <- 0
+group_MH$sample_table$Numeric_Group <- factor(group_MH$sample_table$Numeric_Group)
 # Check
-group_Remnant$sample_table$Numeric_Group
+group_MH$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_Remnant<- trans_alpha$new(dataset = group_Remnant, group = "Numeric_Group")
+group_MH<- trans_alpha$new(dataset = group_MH$merge_taxa('Phylum'), group = "Numeric_Group")
 # See
-group_Remnant$data_alpha
-# Try anova
-group_Remnant$cal_diff(method = "anova")
-group_Remnant$res_diff
+group_MH$data_alpha
+# Do KW_dunn
+group_MH$cal_diff(method = "KW_dunn")
+group_MH$res_diff
 # Plot
-group_Remnant$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_MH$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-#### Alpha diversity Phylum level for each landcover type ####
-# Grassland
+# Narra (Pterocarpus indicus)
 # remember first clone the whole dataset
-group_Grass <- clone(meco_datasetMPJ)
-# select 'Grassland'
-group_Grass$sample_table <- subset(group_Grass$sample_table, Landcover == "Grassland")
+group_N <- clone(meco_datasetRZ)
+# select 'Narra (Pterocarpus indicus)'
+group_N$sample_table <- subset(group_N$sample_table, Rhizosphere == "Narra (Pterocarpus indicus)")
 # trim all the data
-group_Grass$tidy_dataset()
+group_N$tidy_dataset()
 # Check
-group_Grass
+group_N
 # Extract numeric parts (transect) and create grouping factor
-group_Grass$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_Grass$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_Grass$sample_table$Numeric_Group[is.na(group_Grass$sample_table$Numeric_Group)] <- 0
-group_Grass$sample_table$Numeric_Group <- factor(group_Grass$sample_table$Numeric_Group)
+group_N$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_N$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_N$sample_table$Numeric_Group[is.na(group_N$sample_table$Numeric_Group)] <- 0
+group_N$sample_table$Numeric_Group <- factor(group_N$sample_table$Numeric_Group)
 # Check
-group_Grass$sample_table$Numeric_Group
+group_N$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_Grass<- trans_alpha$new(dataset = group_Grass$merge_taxa('Phylum'), group = "Numeric_Group")
+group_N<- trans_alpha$new(dataset = group_N$merge_taxa('Phylum'), group = "Numeric_Group")
 # See
-group_Grass$data_alpha
-# Try anova
-group_Grass$cal_diff(method = "anova")
-head(group_Grass$res_diff)
+group_N$data_alpha
+# Do KW_dunn
+group_N$cal_diff(method = "KW_dunn")
+group_N$res_diff
 # Plot
-group_Grass$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_N$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-# Two Years Old
+# Coccus nucifera
 # remember first clone the whole dataset
-group_2YO <- clone(meco_datasetMPJ)
-# select 'Two Years Old'
-group_2YO$sample_table <- subset(group_2YO$sample_table, Landcover == "TwoYearsOld")
+group_C <- clone(meco_datasetRZ)
+# select 'Coccus nucifera'
+group_C$sample_table <- subset(group_C$sample_table, Rhizosphere == "Coccus nucifera")
 # trim all the data
-group_2YO$tidy_dataset()
+group_C$tidy_dataset()
 # Check
-group_2YO
+group_C
 # Extract numeric parts (transect) and create grouping factor
-group_2YO$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_2YO$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_2YO$sample_table$Numeric_Group[is.na(group_2YO$sample_table$Numeric_Group)] <- 0
-group_2YO$sample_table$Numeric_Group <- factor(group_2YO$sample_table$Numeric_Group)
+group_C$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_C$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_C$sample_table$Numeric_Group[is.na(group_C$sample_table$Numeric_Group)] <- 0
+group_C$sample_table$Numeric_Group <- factor(group_C$sample_table$Numeric_Group)
 # Check
-group_2YO$sample_table$Numeric_Group
+group_C$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_2YO<- trans_alpha$new(dataset = group_2YO$merge_taxa('Phylum'), group = "Numeric_Group")
+group_C<- trans_alpha$new(dataset = group_C$merge_taxa('Phylum'), group = "Numeric_Group")
 # See
-group_2YO$data_alpha
-# Try anova
-group_2YO$cal_diff(method = "anova")
-head(group_2YO$res_diff)
+group_C$data_alpha
+# Do KW_dunn
+group_C$cal_diff(method = "KW_dunn")
+group_C$res_diff
 # Plot
-group_2YO$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_C$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
-# Ten Years Old
+# Imperata cylindrica
 # remember first clone the whole dataset
-group_10YO <- clone(meco_datasetMPJ)
-# select 'Two Years Old'
-group_10YO$sample_table <- subset(group_10YO$sample_table, Landcover == "TenYearsold")
+group_IC <- clone(meco_datasetRZ)
+# select 'Coccus nucifera'
+group_IC$sample_table <- subset(group_IC$sample_table, Rhizosphere == "Imperata cylindrica")
 # trim all the data
-group_10YO$tidy_dataset()
+group_IC$tidy_dataset()
 # Check
-group_10YO
+group_IC
 # Extract numeric parts (transect) and create grouping factor
-group_10YO$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_10YO$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_10YO$sample_table$Numeric_Group[is.na(group_10YO$sample_table$Numeric_Group)] <- 0
-group_10YO$sample_table$Numeric_Group <- factor(group_10YO$sample_table$Numeric_Group)
+group_IC$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_IC$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
+group_IC$sample_table$Numeric_Group[is.na(group_IC$sample_table$Numeric_Group)] <- 0
+group_IC$sample_table$Numeric_Group <- factor(group_IC$sample_table$Numeric_Group)
 # Check
-group_10YO$sample_table$Numeric_Group
+group_IC$sample_table$Numeric_Group
 # Calculate alpha diversity at ASVs level
-group_10YO<- trans_alpha$new(dataset = group_10YO$merge_taxa('Phylum'), group = "Numeric_Group")
+group_IC<- trans_alpha$new(dataset = group_IC$merge_taxa('Phylum'), group = "Numeric_Group")
 # See
-group_10YO$data_alpha
-# Try anova
-group_10YO$cal_diff(method = "anova")
-head(group_10YO$res_diff)
+group_IC$data_alpha
+# Do KW_dunn
+group_IC$cal_diff(method = "KW_dunn")
+group_IC$res_diff
 # Plot
-group_10YO$plot_alpha(measure = "Observed", shape = "Numeric_Group")
-
-# TwentyfourYearsold
-# remember first clone the whole dataset
-group_24YO <- clone(meco_datasetMPJ)
-# select 'Two Years Old'
-group_24YO$sample_table <- subset(group_24YO$sample_table, Landcover == "TwentyfourYearsold")
-# trim all the data
-group_24YO$tidy_dataset()
-# Check
-group_24YO
-# Extract numeric parts (transect) and create grouping factor
-group_24YO$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_24YO$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_24YO$sample_table$Numeric_Group[is.na(group_24YO$sample_table$Numeric_Group)] <- 0
-group_24YO$sample_table$Numeric_Group <- factor(group_24YO$sample_table$Numeric_Group)
-# Check
-group_24YO$sample_table$Numeric_Group
-# Calculate alpha diversity at ASVs level
-group_24YO<- trans_alpha$new(dataset = group_24YO$merge_taxa('Phylum'), group = "Numeric_Group")
-# See
-group_24YO$data_alpha
-# Try anova
-group_24YO$cal_diff(method = "anova")
-head(group_24YO$res_diff)
-# Plot
-group_24YO$plot_alpha(measure = "Observed", shape = "Numeric_Group")
-
-# Remnant
-# remember first clone the whole dataset
-group_Remnant <- clone(meco_datasetMPJ)
-# select 'Two Years Old'
-group_Remnant$sample_table <- subset(group_Remnant$sample_table, Landcover == "Remnant")
-# trim all the data
-group_Remnant$tidy_dataset()
-# Check
-group_Remnant
-# Extract numeric parts (transect) and create grouping factor
-group_Remnant$sample_table$Numeric_Group <- as.numeric(stringr::str_extract(group_Remnant$sample_table$original_sample_id, "(?<=\\D)(\\d+)"))
-group_Remnant$sample_table$Numeric_Group[is.na(group_Remnant$sample_table$Numeric_Group)] <- 0
-group_Remnant$sample_table$Numeric_Group <- factor(group_Remnant$sample_table$Numeric_Group)
-# Check
-group_Remnant$sample_table$Numeric_Group
-# Calculate alpha diversity at ASVs level
-group_Remnant<- trans_alpha$new(dataset = group_Remnant$merge_taxa('Phylum'), group = "Numeric_Group")
-# See
-group_Remnant$data_alpha
-# Try anova
-group_Remnant$cal_diff(method = "anova")
-head(group_Remnant$res_diff)
-# Plot
-group_Remnant$plot_alpha(measure = "Observed", shape = "Numeric_Group")
+group_IC$plot_alpha(measure = "Observed", shape = "Numeric_Group")
 
 #### Plot Alpha diversity ####
 # The plot_alpha function add the significance label by searching the results in object$res_diff 
 # instead of recalculating the significance. 
-# Plot the alpha diversity for each group and include the anova result:
-t1$cal_diff(method = "anova")
+# Plot the alpha diversity for each group and include the KW result:
+t1$cal_diff(method = "KW_dunn")
 #  y_increase can adjust the distance from the letters to the highest point, see for example:
 t1$plot_alpha(measure = "Chao1", y_increase = 0.3)
 t1$plot_alpha(measure = "Chao1", y_increase = 0.1)
@@ -717,28 +837,28 @@ t1$plot_alpha(measure = "Chao1", y_increase = 0.1)
 t1$plot_alpha(measure = "Chao1", add_sig_text_size = 6, add = "jitter", order_x_mean = TRUE)
 # Statistical difference from another statistical analysis:
 t1$cal_diff(method = "wilcox")
-t1$plot_alpha(measure = "Observed", shape = "Landcover")
+t1$plot_alpha(measure = "Observed", shape = "Rhizosphere")
 #  y_start: starting height for the first label
 #  y_increase: increased height for each label
-t1$plot_alpha(measure = "Chao1", shape = "Landcover", add = "jitter", y_start = 0.1, y_increase = 0.1)
+t1$plot_alpha(measure = "Chao1", shape = "Rhizosphere", add = "jitter", y_start = 0.1, y_increase = 0.1)
 # Possibility to remove the 'ns' with:
 t1$res_diff %<>% base::subset(Significance != "ns")
 t1$plot_alpha(measure = "Chao1", add = "dotplot", xtext_size = 15)
 # The trans_alpha class supports the differential test of groups within each group 
 # using the by_group parameter.
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ, group = "Hill__side", by_group = "Landcover")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ, group = "Hill__side", by_group = "Rhizosphere")
 t1$cal_diff(method = "wilcox")
 t1$plot_alpha(measure = "Shannon")
 # Note: Scheirer Ray Hare test is a nonparametric test that is suitable for a two-way factorial experiment.
-# t1 <- trans_alpha$new(dataset = meco_datasetMPJ)
+# t1 <- trans_alpha$new(dataset = meco_datasetRZ)
 # require rcompanion package to be installed
-# t1$cal_diff(method = "scheirerRayHare", formula = "Landcover+Hill__side")
+# t1$cal_diff(method = "scheirerRayHare", formula = "Rhizosphere+Hill__side")
 
 # Additional code for taxonomic plot
-# Abundance for each landcover type
+# Abundance for each Rhizosphere type
 # try<-trans_abund$new(dataset=tmp, ntaxa = 5)
-# try$plot_bar(facet = "Landcover")
-# try$plot_heatmap(facet = "Landcover")
+# try$plot_bar(facet = "Rhizosphere")
+# try$plot_heatmap(facet = "Rhizosphere")
 
 #### Alpha diversity and lmer ####
 # Linear mixed-effects model can be selected with the method = "lme". 
@@ -748,11 +868,11 @@ t1$plot_alpha(measure = "Shannon")
 # In the return table, conditional R2 is the total variance explained by fixed and random effects,
 # and marginal R2 is the variance explained by fixed effects.
 # if(!require("lmerTest")) install.packages("lmerTest")
-t1 <- trans_alpha$new(dataset = meco_datasetMPJ)
-t1$cal_diff(method = "lme", formula = "Landcover + (1|Hill__side)")
+t1 <- trans_alpha$new(dataset = meco_datasetRZ)
+t1$cal_diff(method = "lme", formula = "Rhizosphere + (1|Hill__side)")
 View(t1$res_diff)
 # return_model = TRUE can return original models, i.e. object$res_model
-t1$cal_diff(method = "lme", formula = "Landcover + (1|Hill__side)", return_model = TRUE)
+t1$cal_diff(method = "lme", formula = "Rhizosphere + (1|Hill__side)", return_model = TRUE)
 # Note that from v1.9.0, the parameter plot_type control which type of plot is employed. 
 # All the options starting with “gg” (e.g., “ggboxplot”, “ggdotplot”, “ggviolin”, “ggstripchart”, “ggerrorplot”) 
 # means they are the functions coming from the ggpubr package.
@@ -787,14 +907,14 @@ t1$cal_diff(method = "lme", formula = "Landcover + (1|Hill__side)", return_model
 # t1$plot_alpha(plot_type = "barerrorbar", measure = "Chao1", y_increase = -0.3)
 # t1$plot_alpha(plot_type = "barerrorbar", measure = "Chao1", bar_width = 0.6, errorbar_width = 0.2, errorbar_size = 1, errorbar_addpoint = FALSE)
 # by_group example
-# t1 <- trans_alpha$new(dataset = mt, group = "Landcover", by_group = "Landcover")
+# t1 <- trans_alpha$new(dataset = mt, group = "Rhizosphere", by_group = "Rhizosphere")
 # t1$cal_diff(method = "KW_dunn", measure = "Shannon", KW_dunn_letter = TRUE)
 # View(t1$res_diff)
 # t1$plot_alpha(plot_type = "errorbar", measure = "Shannon")
 # t1$plot_alpha(plot_type = "errorbar", measure = "Shannon", add_line = TRUE, line_type = 2)
 # t1$plot_alpha(plot_type = "errorbar", plot_SE = FALSE, measure = "Shannon", add_line = TRUE, line_type = 2)
 # From v1.4.0, the heatmap can be used to visualize the significances for the case with multiple factors in the formula.
-# t1 <- trans_alpha$new(dataset = meco_datasetMPJ, group = "Landcover")
+# t1 <- trans_alpha$new(dataset = meco_datasetRZ, group = "Rhizosphere")
 # t1$cal_diff(method = "anova", formula = "Group+Type+Group:Type")
 # t1$plot_alpha(color_palette = rev(RColorBrewer::brewer.pal(n = 11, name = "RdYlBu")), trans = "log10")
 # t1$plot_alpha(color_palette = c("#053061", "white", "#A50026"), trans = "log10")
@@ -802,7 +922,7 @@ t1$cal_diff(method = "lme", formula = "Landcover + (1|Hill__side)", return_model
 # t1$plot_alpha(color_values = c("#053061", "white", "#A50026"), trans = "log10", filter_feature = "", text_y_position = "left")
 # t1$plot_alpha(color_values = c("#053061", "white", "#A50026"), trans = "log10", filter_feature = "", text_y_position = "left", cluster_ggplot = "row")
 
-#### Beta diversity calculation ####
+#### Beta diversity calculation without phylogenetic tree ####
 # If method parameter is not provided, the function automatically calculates Bray-curtis, Jaccard, 
 # weighted Unifrac and unweighted unifrac matrixes (Lozupone and Knight 2005).
 # unifrac = FALSE means do not calculate unifrac metric (which is based on phylogeny)
@@ -831,43 +951,50 @@ t1$cal_diff(method = "lme", formula = "Landcover + (1|Hill__side)", return_model
 # }
 # Calculation without Phylogenetic tree, if unifrac=T it will use
 # the phylogenetic tree, but note that the tree is built for the core community (taxa with>100 sequences)
-meco_datasetMPJ$cal_betadiv(unifrac = F)
+meco_datasetRZ$cal_betadiv(unifrac = F)
 #  return beta_diversity list in the object
-class(meco_datasetMPJ$beta_diversity)
+class(meco_datasetRZ$beta_diversity)
 #  save beta_diversity to a directory
-meco_datasetMPJ$save_betadiv(dirpath = "beta_diversity")
+meco_datasetRZ$save_betadiv(dirpath = "beta_diversity")
 # create trans_beta object
 # For PCoA and NMDS, measure parameter must be provided.
 # measure parameter should be either one of names(mt$beta_diversity) or a customized symmetric matrix
-t1 <- trans_beta$new(dataset = meco_datasetMPJ, group = "Landcover", measure = "bray")
-# Visualisation of the beta diversity
+t1 <- trans_beta$new(dataset = meco_datasetRZ, group = "Rhizosphere", measure = "jaccard")
+# Visualisation of the beta diversity with NMDS
+t1$cal_ordination(method = "NMDS")
+t1$res_ordination
+specific_colors <- c("Saccharum spp." = "darkorchid1", "Acacia mangiumY" = "deepskyblue1", "Acacia mangiumO" = "darkblue", "Mahogany (Swietenia macrophylla)" = "gold2", 
+                     "Narra (Pterocarpus indicus)" = "green3", "Coccus nucifera" = "chocolate4", "Imperata cylindrica"="red")
+plot<-t1$plot_ordination(plot_color = "Rhizosphere", plot_type = "point", color_values = specific_colors)
+plot + labs(title="Bacteria communities")+theme_bw()
+# Visualisation of the beta diversity with PCoA
 t1$cal_ordination(method = "PCoA")
 # t1$res_ordination is the ordination result list
 class(t1$res_ordination)
 t1$res_ordination
 # plot the PCoA result with confidence ellipse
 t1$sample_table$Hill__side<-as.factor(t1$sample_table$Hill__side)
-# t1$plot_ordination(plot_color = "Landcover", plot_type = c("point","ellipse")  , plot_shape = "Hill__side")
-plot<-t1$plot_ordination(plot_color = "Landcover", plot_type = c("point","ellipse"))
-plot + labs(title="Fungi communities")
-# The warning appears because it says that the ellipses are draw using all the points, 
-# not taking into account the N and S side of the hill, and thus the shape of them.
+# t1$plot_ordination(plot_color = "Rhizosphere", plot_type = c("point","ellipse")  , plot_shape = "Hill__side")
+specific_colors <- c("Saccharum spp." = "darkorchid1", "Acacia mangiumY" = "deepskyblue1", "Acacia mangiumO" = "darkblue", "Mahogany (Swietenia macrophylla)" = "gold2", 
+                     "Narra (Pterocarpus indicus)" = "green3", "Coccus nucifera" = "chocolate4", "Imperata cylindrica"="red")
+plot<-t1$plot_ordination(plot_color = "Rhizosphere", plot_type = "point", color_values = specific_colors)
+plot + labs(title="Bacteria communities")+theme_bw()
 # Other examples and options
-t1$plot_ordination(plot_color = "Landcover", plot_type = "point")
-t1$plot_ordination(plot_color = "Landcover", point_size = 5, point_alpha = .2, plot_type = c("point", "ellipse"), ellipse_chull_fill = FALSE)
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = c("point", "centroid"))
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = c("point", "ellipse", "centroid"))
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = c("point", "chull"))
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = c("point", "chull", "centroid"))
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = c("chull", "centroid"))
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = c("point", "chull", "centroid"), add_sample_label = "SampleID")
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = "centroid")
-t1$plot_ordination(plot_color = "Landcover", plot_shape = "Hill__side", plot_type = "centroid", centroid_segment_alpha = 0.9, centroid_segment_size = 1, centroid_segment_linetype = 1)
-t1$plot_ordination(plot_type = c("point", "centroid"), plot_color = "Landcover", centroid_segment_linetype = 1)
-t1$plot_ordination(plot_color = "Landcover", point_size = 5, point_alpha = 2, plot_type = c("point", "chull"), ellipse_chull_fill = FALSE, ellipse_chull_alpha = 0.1)
-t1$plot_ordination(plot_color = "Landcover") + theme(panel.grid = element_blank()) + geom_vline(xintercept = 0, linetype = 2) + geom_hline(yintercept = 0, linetype = 2)
+t1$plot_ordination(plot_color = "Rhizosphere", plot_type = "point")
+t1$plot_ordination(plot_color = "Rhizosphere", point_size = 5, point_alpha = .2, plot_type = c("point", "ellipse"), ellipse_chull_fill = FALSE)
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = c("point", "centroid"))
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = c("point", "ellipse", "centroid"))
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = c("point", "chull"))
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = c("point", "chull", "centroid"))
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = c("chull", "centroid"))
+#t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = c("point", "chull", "centroid"), add_sample_label = "SampleID")
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = "centroid")
+t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Hill__side", plot_type = "centroid", centroid_segment_alpha = 0.9, centroid_segment_size = 1, centroid_segment_linetype = 1)
+t1$plot_ordination(plot_type = c("point", "centroid"), plot_color = "Rhizosphere", centroid_segment_linetype = 1)
+t1$plot_ordination(plot_color = "Rhizosphere", point_size = 5, point_alpha = 2, plot_type = c("point", "chull"), ellipse_chull_fill = FALSE, ellipse_chull_alpha = 0.1)
+t1$plot_ordination(plot_color = "Rhizosphere") + theme(panel.grid = element_blank()) + geom_vline(xintercept = 0, linetype = 2) + geom_hline(yintercept = 0, linetype = 2)
 # PCA with Genus data
-tmp <- meco_datasetMPJ$merge_taxa(taxa = "Genus")
+tmp <- meco_datasetRZ$merge_taxa(taxa = "Genus")
 tmp$tax_table %<>% .[.$Genus != "g__", ]
 tmp$tidy_dataset()
 rownames(tmp$otu_table) <- tmp$tax_table[rownames(tmp$otu_table), "Genus"]
@@ -875,33 +1002,32 @@ rownames(tmp$tax_table) <- tmp$tax_table[, "Genus"]
 # Plot and compare between distances
 t1 <- trans_beta$new(dataset = tmp)
 t1$cal_ordination(method = "PCA")
-t1$plot_ordination(plot_color = "Landcover", loading_arrow = TRUE, loading_text_italic = TRUE)
+t1$plot_ordination(plot_color = "Rhizosphere", loading_arrow = TRUE, loading_text_italic = TRUE)
 # Return exploring the previous general dataset
-t1 <- trans_beta$new(dataset = meco_datasetMPJ, group = "Landcover", measure = "bray")
+t1 <- trans_beta$new(dataset = meco_datasetRZ, group = "Rhizosphere", measure = "jaccard")
 # calculate and plot sample distances within groups
 t1$cal_group_distance(within_group = TRUE)
 # return t1$res_group_distance
-t1$res_group_distance
-# perform Wilcoxon Rank Sum and Signed Rank Tests
-t1$cal_group_distance_diff(method = "wilcox")
+# perform KW and Signed Rank Tests
+t1$cal_group_distance_diff(method = "KW")
 # plot_group_order parameter can be used to adjust orders in x axis
 t1$plot_group_distance(add = "mean")
 # calculate and plot sample distances between groups
 t1$cal_group_distance(within_group = FALSE)
-t1$cal_group_distance_diff(method = "wilcox")
+t1$cal_group_distance_diff(method = "KW")
 # parameters in plot_group_distance function will be passed to the plot_alpha function of trans_alpha class
 t1$plot_group_distance(plot_type = "ggviolin", add = "mean_se")
-t1$plot_group_distance(add = "mean")
+t1$plot_group_distance(add = "mean")+theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size=8))
 # Clustering
-tmp <- clone(meco_datasetMPJ)
+tmp <- clone(meco_datasetRZ)
 # extract a part of data if needed
-# tmp$sample_table %<>% subset(Landcover %in% c("Grassland", "Remnant"))
+# tmp$sample_table %<>% subset(Rhizosphere %in% c("Grassland", "Remnant"))
 # tmp$tidy_dataset()
-t1 <- trans_beta$new(dataset = tmp, group = "Landcover")
+t1 <- trans_beta$new(dataset = tmp, group = "Rhizosphere")
 # use replace_name to set the label name, group parameter used to set the color
-t1$plot_clustering(group = "Landcover", replace_name = c("Landcover"))
-# Permanova analysis to test beta diversity
-t1 <- trans_beta$new(dataset = meco_datasetMPJ, group = "Landcover", measure = "bray")
+t1$plot_clustering(group = "Rhizosphere", replace_name = c("Rhizosphere"))
+# Permanova analysis
+t1 <- trans_beta$new(dataset = meco_datasetRZ, group = "Rhizosphere", measure = "jaccard")
 # manova for all groups when manova_all = TRUE
 t1$cal_manova(manova_all = TRUE)
 t1$res_manova
@@ -910,14 +1036,15 @@ t1$res_manova
 t1$cal_manova(manova_all = FALSE)
 t1$res_manova
 # Anosim analysis
-t1$cal_anosim(group = "Landcover")
+t1$cal_anosim(group = "Rhizosphere")
 t1$res_anosim
-t1$cal_anosim(group = "Landcover", paired = TRUE)
+t1$cal_anosim(group = "Rhizosphere", paired = TRUE)
 t1$res_anosim
-# Extra analysis:
+# PERMDISP analysis
 # PERMDISP(Anderson et al. 2011) is implemented to test multivariate homogeneity of groups dispersions (variances) based on the betadisper function of vegan package.
 # for the whole comparison and for each paired groups
-# t1$cal_betadisper()
+t1$cal_betadisper()
+t1$res_betadisper
 
 #### Composition-based class exploration with plots ####
 # Composition-based class. These analyses are to visualise the taxonomic abundance, considering both the different ASVs,
@@ -925,49 +1052,53 @@ t1$res_anosim
 # The trans_abund class and trans_venn class are organised into the section ‘Composition-based class’, 
 # since they are mainly used to show the composition information of communities.
 # create trans_abund object
-# Phyla level (ntaxa=): select top 8 abundant Phyla.
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Phylum", ntaxa = 8)
+# Phyla level (ntaxa=): select top 5 abundant Phyla.
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Phylum", ntaxa = 5)
 # t1 object now include the transformed abundance data t1$abund_data 
 # and other elements for the following plotting
 # Plots
 # Adjusting ladncover factors levels in the right order
-t1$plot_bar(others_color = "grey70", facet = "Landcover", xtext_keep = FALSE, legend_text_italic = FALSE)
+t1$plot_bar(others_color = "grey70", facet = "Rhizosphere", xtext_keep = FALSE, legend_text_italic = FALSE)
 #  return a ggplot2 object
 #  require package ggh4x, first run install.packages("ggh4x") if not installed
-t1$plot_bar(others_color = "grey70", facet = c("Landcover", "Hill__side"), xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1)
+t1$plot_bar(others_color = "grey70", facet = c("Rhizosphere", "Hill__side"), xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1)
 # Genus level
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Genus", ntaxa = 8)
-t1$plot_bar(others_color = "grey70", facet = "Landcover", xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1)
-t1$plot_bar(others_color = "grey70", facet = c("Landcover", "Hill__side"), xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1)
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Genus", ntaxa = 8)
+t1$plot_bar(others_color = "grey70", facet = "Rhizosphere", xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1)
+t1$plot_bar(others_color = "grey70", facet = c("Rhizosphere", "Hill__side"), xtext_keep = FALSE, legend_text_italic = FALSE, barwidth = 1)
 # use_alluvium = TRUE make the alluvial plot, clustering =TRUE can be used 
 # to reorder the samples by clustering. bar_type = FALSE can remove 'others'
 t1$plot_bar(bar_full = FALSE, use_alluvium = TRUE, clustering = TRUE, xtext_angle = 30, xtext_size = 3, color_values = RColorBrewer::brewer.pal(8, "Set2"))
 # Barplot with mean values
 # The bar plot can also be performed with group mean values. Note that, from v0.16.0, the parameter group_morestats = TRUE can be used to add more summary statistics in the return data_abund when groupmean parameter is provided.
 # The groupmean parameter can be used to obtain the group-mean barplot.
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Phylum", ntaxa = 10, groupmean = "Landcover")
-g1 <- t1$plot_bar(order_x = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"), legend_text_italic = FALSE)
-g1 + theme_classic() + theme(axis.title.y = element_text(size = 18))
-# show 15 taxa at Genus level
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Genus", ntaxa = 15)
-t1$plot_box(group = "Landcover", xtext_angle = 30)
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Phylum", ntaxa = 10, groupmean = "Rhizosphere")
+#g1 <- t1$plot_bar(order_x = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"), legend_text_italic = FALSE)
+#g1 + theme_classic() + theme(axis.title.y = element_text(size = 18))+labs(title = "Bacteria phylum relative abundance")
+# Mean at ASVs level
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Species", ntaxa = 10, groupmean = "Rhizosphere")
+#g1 <- t1$plot_bar(order_x = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"), legend_text_italic = FALSE)
+#g1 + theme_classic() + theme(axis.title.y = element_text(size = 18))+ ylim(0,5)+labs(title = "Bacteria ASVs relative abundance")
+# show 5 taxa at Genus level
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Genus", ntaxa = 5)
+t1$plot_box(group = "Rhizosphere", xtext_angle = 30)
 # Heatmap
 # Show the heatmap with the high abundant genera.
-# show 40 taxa at Genus level
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Genus", ntaxa = 40)
-g1 <- t1$plot_heatmap(facet = "Landcover", xtext_keep = FALSE, withmargin = FALSE, plot_breaks = c(0.01, 0.1, 1, 10))
+# show 5 taxa at Genus level
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Genus", ntaxa = 5)
+g1 <- t1$plot_heatmap(facet = "Rhizosphere", xtext_keep = FALSE, withmargin = FALSE, plot_breaks = c(0.01, 0.1, 1, 10))
 #Show the plot
 g1
-g1 + theme(axis.text.y = element_text(face = 'italic'))
+g1 + theme(axis.text.y = element_text(face = 'italic'))+labs(title = "Bacteria genera relative abundance")
 # Donut chart
 # The donut and radar charts are implemented from v0.17.0. Please install the dependent packages according to the steps (https://chiliubio.github.io/microeco_tutorial/intro.html# dependence).
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Phylum", ntaxa = 8, groupmean = "Landcover")
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Phylum", ntaxa = 8, groupmean = "Rhizosphere")
 t1$plot_donut(label = FALSE)
 t1$plot_donut(label = TRUE)
 # The coord_flip parameter in plot_bar function can be changed to make the coordinate 
 # axis flipped. The clustering plot can also be added in the bar plot. 
 # In this case, the coordinate axis will be flipped automatically for better visualization.
-t1 <- trans_abund$new(dataset = meco_datasetMPJ, taxrank = "Phylum", ntaxa = 4, groupmean = "Landcover")
+t1 <- trans_abund$new(dataset = meco_datasetRZ, taxrank = "Phylum", ntaxa = 10, groupmean = "Rhizosphere")
 g1 <- t1$plot_bar(coord_flip = TRUE)
 g1 <- g1 + theme_classic() + theme(axis.title.x = element_text(size = 16), axis.ticks.y = element_blank(), axis.line.y = element_blank())
 # Show the plot
@@ -980,16 +1111,14 @@ g1[[1]] <- g1[[1]] + theme_classic() + theme(axis.title.x = element_text(size = 
 g1
 #  save the figure (WRITE THE DISTANCE METRIC USED)
 ggsave("ClusteringBCdistance.png", g1, width = 8, height = 5)
-
 #### Venn analysis ####
 # Analysis of the shared and unique taxa among sites
 # The trans_venn class is developed for venn analysis, i.e. shared and unique taxa across samples/groups.
 # First merge samples as one community for each group
-tmp <- meco_datasetMPJ$merge_samples("Landcover")
+tmp <- meco_datasetRZ$merge_samples("Rhizosphere")
 # tmp is a new microtable object
 # create trans_venn object
 t1 <- trans_venn$new(tmp, ratio = NULL)
-t1$data_summary
 t1$plot_venn()
 # create venn plot with more information
 t1 <- trans_venn$new(tmp, ratio = "seqratio")
@@ -997,7 +1126,7 @@ t1$plot_venn()
 # The integer is ASVs number, while the percentage data is the sequence number/total sequence number
 # Now, we transform the results of venn plot to the traditional feature-sample table, that is, another object of microtable class
 # transform venn results to the sample-species table, here do not consider abundance, only use presence/absence.
-tmp <- meco_datasetMPJ$merge_samples("Landcover")
+tmp <- meco_datasetRZ$merge_samples("Rhizosphere")
 t1 <- trans_venn$new(tmp)
 t2 <- t1$trans_comm(use_frequency = TRUE)
 # t2 is a new microtable class, each part is considered a sample
@@ -1015,37 +1144,45 @@ t3$plot_pie(facet_nrow = 3, color_values = c(RColorBrewer::brewer.pal(8, "Dark2"
 
 #### Test to see community composition differences among sites ####
 # Kruskal-Wallis Rank Sum Test for all groups (>= 2)
-t1 <- trans_diff$new(dataset = meco_datasetMPJ, method = "KW", group = "Landcover", taxa_level = "all", filter_thres = 0.001)
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "KW", group = "Rhizosphere", taxa_level = "all", filter_thres = 0.001)
 t1$plot_diff_abund(use_number = 1:20)
 # Dunn's Kruskal-Wallis Multiple Comparisons when group number > 2
 # Select the level of interest
-t1 <- trans_diff$new(dataset = meco_datasetMPJ, method = "KW_dunn", group = "Landcover", taxa_level = "Genus", filter_thres = 0.0001)
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "KW_dunn", group = "Rhizosphere", taxa_level = "Genus", filter_thres = 0.0001)
 t1$plot_diff_abund(use_number = 1:10, add_sig = T, coord_flip = F)
 # Wilcoxon Rank Sum and Signed Rank Tests for all paired groups
-t1 <- trans_diff$new(dataset = meco_datasetMPJ, method = "wilcox", group = "Landcover", taxa_level = "Genus", filter_thres = 0.001)
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "wilcox", group = "Rhizosphere", taxa_level = "Genus", filter_thres = 0.001)
 # filter something not needed to show
 t1$res_diff %<>% subset(Significance %in% "***")
 t1$plot_diff_abund()
 # y_start and y_increase control the position of labels; for the details, please see the document of plot_alpha function in trans_alpha class
 t1$plot_diff_abund(y_start = 0.05, y_increase = 0.1)
-# anova
-t1 <- trans_diff$new(dataset = meco_datasetMPJ, method = "anova", group = "Landcover", taxa_level = "Genus", filter_thres = 0.001)
+# KW_dunn
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "KW_dunn", group = "Rhizosphere", taxa_level = "Genus", filter_thres = 0.001)
 t1$plot_diff_abund(coord_flip = F, plot_type = "barerrorbar", errorbar_addpoint = FALSE)
-t1$res_diff
-# LEfSe analysis (if used, cite Nicola Segata, Jacques Izard, Levi Walron, Dirk Gevers, Larisa Miropolsky, Wendy Garrett, Curtis Huttenhower.
+head(t1$res_diff)
+#### LEfSe analysis ####
+# (if used, cite Nicola Segata, Jacques Izard, Levi Walron, Dirk Gevers, Larisa Miropolsky, Wendy Garrett, Curtis Huttenhower.
 # "Metagenomic Biomarker Discovery and Explanation" Genome Biology, 2011 Jun 24;12(6):R60)
-t1 <- trans_diff$new(dataset = meco_datasetMPJ, method = "lefse", group = "Landcover", alpha = 0.01, lefse_subgroup = NULL, taxa_level = "Genus")
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "lefse", group = "Rhizosphere", alpha = 0.01, lefse_subgroup = NULL, taxa_level = "Phylum")
 # see t1$res_diff for the result
+t1$res_diff
+write.table(t1$res_diff,"LefSeBacteria.csv")
+# At the genus level
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "lefse", group = "Rhizosphere", alpha = 0.01, lefse_subgroup = NULL, taxa_level = "Genus")
+# see t1$res_diff for the result
+t1$res_diff
+write.table(t1$res_diff,"LefSeBacteriaGenera.csv")
 # From v0.8.0, threshold is used for the LDA score selection.
-t1$plot_diff_bar(threshold = 4)
+t1$plot_diff_bar(threshold = 3) # 4 for phylum and 3 for genera
 # we show 20 taxa with the highest LDA (log10)
-t1$plot_diff_bar(use_number = 1:30, width = 0.8, group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"))
+#t1$plot_diff_bar(use_number = 1:43, width = 0.8, group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"))
 # show part of the table
 t1$res_diff[1:5, c(1, 3, 4, 6)]
 # Visualise better
 t1$plot_diff_abund(use_number = 1:30)
-t1$plot_diff_abund(fill = "Landcover", alpha = 0.5, add_sig = FALSE)
-t1$plot_diff_abund(group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"))
+t1$plot_diff_abund(fill = "Rhizosphere", alpha = 0.5, add_sig = FALSE)
+#t1$plot_diff_abund(group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"))
 t1$plot_diff_abund(coord_flip = FALSE)
 t1$plot_diff_abund(plot_type = "errorbar")
 t1$plot_diff_abund(plot_type = "barerrorbar", coord_flip = FALSE)
@@ -1054,12 +1191,12 @@ t1$plot_diff_abund(plot_type = "barerrorbar", errorbar_addpoint = FALSE, errorba
 # Random Forest
 # use Genus level for parameter taxa_level, if you want to use all taxa, change to "all"
 # nresam = 1 and boots = 1 represent no bootstrapping and use all samples directly
-t1 <- trans_diff$new(dataset = meco_datasetMPJ, method = "rf", group = "Landcover", taxa_level = "Genus")
+t1 <- trans_diff$new(dataset = meco_datasetRZ, method = "rf", group = "Rhizosphere", taxa_level = "Genus")
 # plot the MeanDecreaseGini bar
 # group_order is designed to sort the groups
-g1 <- t1$plot_diff_bar(use_number = 1:20, group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"))
+#g1 <- t1$plot_diff_bar(use_number = 1:20, group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"))
 # plot the abundance using same taxa in g1
-g2 <- t1$plot_diff_abund(group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"), select_taxa = t1$plot_diff_bar_taxa, plot_type = "barerrorbar", add_sig = FALSE, errorbar_addpoint = FALSE, errorbar_color_black = TRUE)
+#g2 <- t1$plot_diff_abund(group_order = c("Grassland", "TwoYearsOld", "TenYearsold", "TwentyfourYearsold", "Remnant"), select_taxa = t1$plot_diff_bar_taxa, plot_type = "barerrorbar", add_sig = FALSE, errorbar_addpoint = FALSE, errorbar_color_black = TRUE)
 # now the y axis in g1 and g2 is same, so we can merge them
 # remove g1 legend; remove g2 y axis text and ticks
 g1 <- g1 + theme(legend.position = "none")
@@ -1076,10 +1213,10 @@ p
 # Using correlation method
 # The parameter cor_method in trans_network is used to select correlation calculation method.
 # default pearson or spearman correlation invoke R base cor.test, a little slow
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "spearman", filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "spearman", filter_thres = 0.001)
 # return t1$res_cor_p list, containing two tables: correlation coefficient table and p value table
 # Spearman correlation based on WGCNA package is applied to show all the following operations:
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "spearman", use_WGCNA_pearson_spearman = TRUE, filter_thres = 0.0001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "spearman", use_WGCNA_pearson_spearman = TRUE, filter_thres = 0.0001)
 # The parameter COR_cut can be used to select the correlation threshold. Furthermore, COR_optimization = TRUE can be used to find the optimized coefficient threshold (potential transition point of network eigenvalues) 
 # instead of the COR_cut based on the RMT theory (Deng et al. 2012).
 # construct network; require igraph package
@@ -1119,8 +1256,8 @@ t1$cal_eigen()
 # return t1$res_eigen
 # Perform correlation heatmap to show the associations between eigengenes and environmental factors
 # create trans_env object
-Metadata_Rhizosphere<-Metadata[Metadata$ProjectFocus=="Rhizosphere",]
-t2 <- trans_env$new(dataset = meco_datasetMPJ, add_data = Metadata_Rhizosphere[,21:31],complete_na = TRUE)
+Metadata_field<-Metadata[Metadata$ProjectFocus=="Field",]
+t2 <- trans_env$new(dataset = meco_datasetRZ, add_data = Metadata_field[,21:30],complete_na = TRUE)
 # calculate correlations
 t2$cal_cor(add_abund_table = t1$res_eigen)
 # plot the correlation heatmap
@@ -1156,35 +1293,35 @@ t1$plot_sum_links(plot_pos = TRUE, plot_num = 10, color_values = RColorBrewer::b
 # From v1.2.0, method = "circlize" is available for conveniently saving the static plot
 t1$plot_sum_links(method = "circlize", transparency = 0.2, annotationTrackHeight = circlize::mm_h(c(5, 5)))
 # Calculation options for the correlation network
-# use Bray–Curtis index (1-dissimilarity)
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "bray", filter_thres = 0.001)
+# use jaccard index (1-dissimilarity)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "jaccard", filter_thres = 0.001)
 # Pearson correlation
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "pearson", filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "pearson", filter_thres = 0.001)
 # Pearson correlation
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "pearson", use_WGCNA_pearson_spearman = TRUE, filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "pearson", use_WGCNA_pearson_spearman = TRUE, filter_thres = 0.001)
 # Pearson correlation
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "pearson", use_NetCoMi_pearson_spearman = TRUE, filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "pearson", use_NetCoMi_pearson_spearman = TRUE, filter_thres = 0.001)
 # Spearman correlation
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "spearman", use_WGCNA_pearson_spearman = TRUE, filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "spearman", use_WGCNA_pearson_spearman = TRUE, filter_thres = 0.001)
 # Spearman correlation
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "spearman", use_NetCoMi_pearson_spearman = TRUE, filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "spearman", use_NetCoMi_pearson_spearman = TRUE, filter_thres = 0.001)
 # SparCC method
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "sparcc", use_sparcc_method = "SpiecEasi", filter_thres = 0.003)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "sparcc", use_sparcc_method = "SpiecEasi", filter_thres = 0.003)
 # SparCC method
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "sparcc", use_sparcc_method = "NetCoMi", filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "sparcc", use_sparcc_method = "NetCoMi", filter_thres = 0.001)
 # CCLasso method
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "cclasso", filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "cclasso", filter_thres = 0.001)
 # CCREPE method
-t1 <- trans_network$new(dataset = meco_datasetMPJ, cor_method = "ccrepe", filter_thres = 0.001)
+t1 <- trans_network$new(dataset = meco_datasetRZ, cor_method = "ccrepe", filter_thres = 0.001)
 
-#### Network for each land cover type ####
+#### Network for each Rhizosphere ####
 # first create a list
 soil_amp_network <- list()
-# select samples of "Grassland" Landcover
+# select samples of  Rhizosphere
 # use clone to get a deep copy of soil_amp (R6 object)
-tmp <- clone(meco_datasetMPJ)
+tmp <- clone(meco_datasetRZ)
 # change sample_table directly
-tmp$sample_table %<>% subset(Landcover == "Grassland")
+tmp$sample_table %<>% subset(Rhizosphere == "Saccharum spp.")
 # trim all files in the object
 tmp$tidy_dataset()
 # use filter_thres parameter to filter the feature with low relative abundance
@@ -1193,35 +1330,42 @@ tmp <- trans_network$new(dataset = tmp, cor_method = "spearman", filter_thres = 
 # COR_cut denotes the correlation coefficient threshold
 tmp$cal_network(COR_p_thres = 0.01, COR_cut = 0.6)
 # put the network into the list
-soil_amp_network$Grassland <- tmp
-# select samples of "TwoYearsOld" group
-tmp <- clone(meco_datasetMPJ)
-tmp$sample_table %<>% subset(Landcover == "TwoYearsOld")
+soil_amp_network$Saccarum <- tmp
+# select samples of "Acacia mangium" group
+tmp <- clone(meco_datasetRZ)
+tmp$sample_table %<>% subset(Rhizosphere == "Acacia mangium")
 tmp$tidy_dataset()
 tmp <- trans_network$new(dataset = tmp, cor_method = "spearman", filter_thres = 0.0005)
 tmp$cal_network(COR_p_thres = 0.01, COR_cut = 0.6)
-soil_amp_network$TwoYearsOld <- tmp
-# select samples of "TenYearsold" group
-tmp <- clone(meco_datasetMPJ)
-tmp$sample_table %<>% subset(Landcover == "TenYearsold")
+soil_amp_network$Acacia <- tmp
+# select samples of "Mahogany" group
+tmp <- clone(meco_datasetRZ)
+tmp$sample_table %<>% subset(Rhizosphere == "Mahogany (Swietenia macrophylla)")
 tmp$tidy_dataset()
 tmp <- trans_network$new(dataset = tmp, cor_method = "spearman", filter_thres = 0.0005)
 tmp$cal_network(COR_p_thres = 0.01, COR_cut = 0.6)
-soil_amp_network$TenYearsold <- tmp
-# select samples of "TwentyfourYearsold" group
-tmp <- clone(meco_datasetMPJ)
-tmp$sample_table %<>% subset(Landcover == "TwentyfourYearsold")
+soil_amp_network$Mahogany <- tmp
+# select samples of "Narra" group
+tmp <- clone(meco_datasetRZ)
+tmp$sample_table %<>% subset(Rhizosphere == "Narra (Pterocarpus indicus)")
 tmp$tidy_dataset()
 tmp <- trans_network$new(dataset = tmp, cor_method = "spearman", filter_thres = 0.0005)
 tmp$cal_network(COR_p_thres = 0.01, COR_cut = 0.6)
-soil_amp_network$TwentyfourYearsold <- tmp
-# select samples of "Remnant" group
-tmp <- clone(meco_datasetMPJ)
-tmp$sample_table %<>% subset(Landcover == "Remnant")
+soil_amp_network$Narra <- tmp
+# select samples of "Coccus" group
+tmp <- clone(meco_datasetRZ)
+tmp$sample_table %<>% subset(Rhizosphere == "Coccus nucifera")
 tmp$tidy_dataset()
 tmp <- trans_network$new(dataset = tmp, cor_method = "spearman", filter_thres = 0.0005)
 tmp$cal_network(COR_p_thres = 0.01, COR_cut = 0.6)
-soil_amp_network$Remnant <- tmp
+soil_amp_network$Coccus <- tmp
+# select samples of "Imperata cylindrica" group
+tmp <- clone(meco_datasetRZ)
+tmp$sample_table %<>% subset(Rhizosphere == "Imperata cylindrica")
+tmp$tidy_dataset()
+tmp <- trans_network$new(dataset = tmp, cor_method = "spearman", filter_thres = 0.0005)
+tmp$cal_network(COR_p_thres = 0.01, COR_cut = 0.6)
+soil_amp_network$Imperata <- tmp
 # Now we have the list soil_amp_network
 # The function cal_module in meconetcomp package is designed to partition modules for all the networks in the list.
 soil_amp_network %<>% cal_module(undirected_method = "cluster_fast_greedy")
@@ -1242,9 +1386,9 @@ tmp1
 g1 <- tmp1$plot_venn(fill_color = T)
 g1
 ggsave("soil_amp_node_overlap.pdf", g1, width = 7, height = 6)
-# calculate bray distance to reflect the overall differences of networks
-tmp$cal_betadiv(method = "bray")
-tmp$beta_diversity$bray
+# calculate jaccard distance to reflect the overall differences of networks
+tmp$cal_betadiv(method = "jaccard")
+tmp$beta_diversity$jaccard
 # The pipeline of studying edges overlap is similar with the above operations 
 # of nodes comparison. The edge_comp function of meconetcomp package is used to convert edges 
 # distribution to a new microtable object.
@@ -1254,9 +1398,9 @@ tmp <- edge_comp(soil_amp_network)
 tmp1 <- trans_venn$new(tmp, ratio = "numratio")
 g1 <- tmp1$plot_venn(fill_color = FALSE)
 ggsave("soil_amp_edge_overlap.pdf", g1, width = 7, height = 6)
-# calculate bray distance
-tmp$cal_betadiv(method = "bray")
-tmp$beta_diversity$bray
+# calculate jaccard distance
+tmp$cal_betadiv(method = "jaccard")
+tmp$beta_diversity$jaccard
 # Then we extracted the subset of edges according to the intersections of edges across networks, 
 # which can be accomplished with the subset_network function in meconetcomp package.
 # first obtain edges distribution and intersection
@@ -1267,7 +1411,7 @@ tmp2 <- tmp1$trans_comm()
 tmp2$sample_table
 # extract the intersection of all the five networks
 # please use colnames(tmp2$otu_table) to find the required name
-Intersec_all <- subset_network(soil_amp_network, venn = tmp2, name = "TwentyfourYearsold&Remnant")
+Intersec_all <- subset_network(soil_amp_network, venn = tmp2, name = "TwentyfourYearsold&Remnant") # TO CHANGE ACCORDING TO INTEREST
 # Intersec_all is a trans_network object
 # for example, save Intersec_all as gexf format
 Intersec_all$save_network("Intersec_all.gexf")
@@ -1306,41 +1450,42 @@ View(vul_table)
 t1 <- cohesionclass$new(soil_amp_network)
 View(t1$res_list$sample)
 View(t1$res_list$feature)
-t1$cal_diff(method = "anova")
+t1$cal_diff(method = "KW_dunn")
 t1$plot(measure = "r_pos")
+
 #### Analyses with environmental parameters ####
 # Analyses between environmental parameters
 # First, it is better to clone the dataset
-tmp_mt <- clone(meco_datasetMPJ)
-# Metadata dataset for Rhizosphere
-Metadata_Rhizosphere<-Metadata[Metadata$ProjectFocus=="Rhizosphere",]
-Metadata_Rhizosphere[,21:30]
+tmp_mt <- clone(meco_datasetRZ)
+# Metadata dataset for Field not Rhizosphere
+Metadata_field<-Metadata[Metadata$ProjectFocus=="Field",]
+Metadata_field[,22:31]
 # Create the object and complete_na= True because 0 and NA 
-t1 <- trans_env$new(dataset = tmp_mt, add_data = Metadata_Rhizosphere[,21:30],complete_na = TRUE)
+t1 <- trans_env$new(dataset = tmp_mt, add_data = Metadata_field[,22:31],complete_na = TRUE)
 # Difference cross groups with Wilcoxon
-t1$cal_diff(group = "Landcover", method = "wilcox")
+t1$cal_diff(group = "Rhizosphere", method = "wilcox")
 head(t1$res_diff)
-# Do with Anova
-t1$cal_diff(method = "anova", group = "Landcover")
+# Do with KW_dunn
+t1$cal_diff(method = "KW_dunn", group = "Rhizosphere")
 t1$res_diff
 # Observe the correlation among variables
 t1$cal_autocor()
-# Correlation for different landcover types
-t1$cal_autocor(group = "Landcover")
+# Correlation for different Rhizosphere types
+t1$cal_autocor(group = "Rhizosphere")
 
 # Do dbRDA ordination
-# use bray-curtis distance for dbRDA
-t1$cal_ordination(method = "dbRDA", use_measure = "bray", group="Landcover")
-# show the orginal results
+# use jaccard distance for dbRDA
+t1$cal_ordination(method = "dbRDA", use_measure = "jaccard")
+# show the original results
 t1$trans_ordination()
 t1$res_ordination_trans
-t1$plot_ordination(plot_color = "Landcover")
+t1$plot_ordination(plot_color = "Rhizosphere")
 # the main results of RDA are related with the projection and angles between arrows
 # adjust the length of the arrows to show them better
 t1$trans_ordination(adjust_arrow_length = TRUE, max_perc_env = 1.5)
 # t1$res_rda_trans is the transformed result for plotting
-P<-t1$plot_ordination(plot_color = "Landcover")
-P + labs(title="Fungi db-RDA")
+P<-t1$plot_ordination(plot_color = "Rhizosphere")
+P + labs(title="Bacteria db-RDA")
 # The function cal_ordination_envfit can be used to get the contribution of each variables to the model.
 t1$cal_ordination_anova()
 t1$cal_ordination_envfit()
@@ -1352,16 +1497,16 @@ t1$cal_ordination(method = "RDA", taxa_level = "Genus")
 # select 10 features and adjust the arrow length
 t1$trans_ordination(show_taxa = 10, adjust_arrow_length = TRUE, max_perc_env = 1.5, max_perc_tax = 1.5, min_perc_env = 0.2, min_perc_tax = 0.2)
 # t1$res_rda_trans is the transformed result for plot
-t1$plot_ordination(plot_color = "Landcover")
+t1$plot_ordination(plot_color = "Rhizosphere")
 # See other visualisation styles in tutorial
 # Do RDA checking for the significance of the differences
-t1$cal_ordination(method = "RDA", taxa_level = "Genus", use_measure="bray")
+t1$cal_ordination(method = "RDA", taxa_level = "Genus", use_measure="jaccard")
 # get the significance of the terms
 t1$cal_ordination_anova()
 # fit factors onto the ordination to get R2 for each factor
 t1$cal_ordination_envfit()
 t1$trans_ordination(adjust_arrow_length = F)
-g1 <- t1$plot_ordination(plot_color = "Landcover", plot_shape = "Landcover", type="taxa")
+g1 <- t1$plot_ordination(plot_color = "Rhizosphere", plot_shape = "Rhizosphere", type="taxa")
 g1
 ggplot2::ggsave("RDA.pdf", g1, width = 8, height = 6.5)
 # use capture.output to save output
@@ -1378,20 +1523,19 @@ write.table(t1$res_ordination_trans$df_arrows_spe, "RDA_axis_taxa.txt", sep = "\
 # Mantel test can be used to check whether there is 
 # significant correlations between environmental variables and distance matrix.
 # Only enviromental variables
-t1$cal_mantel(use_measure = "bray")
+t1$cal_mantel(use_measure = "jaccard")
 # return t1$res_mantel
 head(t1$res_mantel)
 # mantel test for different groups
-t1$cal_mantel(by_group = "Landcover", use_measure = "bray")
+t1$cal_mantel(by_group = "Rhizosphere", use_measure = "jaccard")
 # partial mantel test
-t1$cal_mantel(partial_mantel = TRUE, by_group = "Landcover", method="spearman")
+t1$cal_mantel(partial_mantel = TRUE, by_group = "Rhizosphere", method="spearman")
 t1$res_mantel
 
-
 # Heatmap to see correlation between taxa and environmental variables
-t1 <- trans_env$new(dataset = meco_datasetMPJ, add_data = Metadata_Rhizosphere[,21:30],complete_na = TRUE)
+t1 <- trans_env$new(dataset = meco_datasetRZ, add_data = Metadata_field[,21:30],complete_na = TRUE)
 # 'p_adjust_type = "Env"' means p adjustment is performed for each environmental variable separately.
-t1$cal_cor(use_data = "Genus", p_adjust_method = "none", by_group="Landcover")
+t1$cal_cor(use_data = "Genus", p_adjust_method = "none", by_group="Rhizosphere")
 # return the results
 t1$res_cor
 # default ggplot2 method with clustering
@@ -1406,9 +1550,9 @@ t1$plot_cor(filter_feature = c("", "*", "**"))
 t1$plot_cor(pheatmap = TRUE, color_palette = rev(RColorBrewer::brewer.pal(n = 9, name = "RdYlBu")))
 
 # To study the correlation between ALPHA diversity and environment
-t1 <- trans_env$new(dataset = meco_datasetMPJ, add_data = Metadata_Rhizosphere[,21:30],complete_na = TRUE)
+t1 <- trans_env$new(dataset = meco_datasetRZ, add_data = Metadata_field[,21:30],complete_na = TRUE)
 # use add_abund_table parameter to add the extra data table
-t1$cal_cor(add_abund_table = t1$alpha_diversity, by_group="Landcover")
+t1$cal_cor(add_abund_table = t1$alpha_diversity, by_group="Rhizosphere")
 # try to use ggplot2 with clustering plot
 t1$plot_cor(cluster_ggplot = "both")
 # see the results
@@ -1417,10 +1561,10 @@ head(t1$res_cor)
 #### ML Classification ####
 # Classification with random forest
 # Load and prepare the dataset
-t1 <- trans_env$new(dataset = meco_datasetMPJ, add_data = Metadata_Rhizosphere[,21:30])
+t1 <- trans_env$new(dataset = meco_datasetRZ, add_data = Metadata_field[,21:30])
 tmp <- t1$data_env %>% t %>% as.data.frame
 # create the object
-t2 <- trans_classifier$new(dataset = meco_datasetMPJ, x.predictors = "All", y.response = "Landcover")
+t2 <- trans_classifier$new(dataset = meco_datasetRZ, x.predictors = "All", y.response = "Rhizosphere")
 # Pre-processing
 t2$cal_preProcess(method = c("center", "scale", "nzv"))
 # All samples are used in training if cal_split function is not performed (SO, IT MUST BE PERFORMED!)
@@ -1478,38 +1622,61 @@ t2$plot_feature_imp(show_sig_group = TRUE, rf_sig_show = "MeanDecreaseGini", coo
 #### Mentel test, correlations between beta diversity and environmental variables ####
 # Show the 4 most abundant phyla (select them from previous analyses)
 # Prepare the dataset
-d1 <- clone(meco_datasetMPJ)
-d1$tax_table <- d1$tax_table[d1$tax_table$Phylum == "p__Ascomycota", ]
+d1 <- clone(meco_datasetRZ)
+d1$tax_table <- d1$tax_table[d1$tax_table$Phylum == "p__Acidobacteriota", ]
 d1$tidy_dataset()
 d1$cal_betadiv()
-d2 <- clone(meco_datasetMPJ)
-d2$tax_table <- d2$tax_table[d2$tax_table$Phylum == "p__Basidiomycota", ]
+d2 <- clone(meco_datasetRZ)
+d2$tax_table <- d2$tax_table[d2$tax_table$Phylum == "p__Pseudomonadota", ]
 d2$tidy_dataset()
 d2$cal_betadiv()
-d3 <- clone(meco_datasetMPJ)
-d3$tax_table <- d3$tax_table[d3$tax_table$Phylum == "p__Rozellomycota", ]
+d3 <- clone(meco_datasetRZ)
+d3$tax_table <- d3$tax_table[d3$tax_table$Phylum == "p__Verrucomicrobiota", ]
 d3$tidy_dataset()
 d3$cal_betadiv()
-d4 <- clone(meco_datasetMPJ)
-d4$tax_table <- d4$tax_table[d4$tax_table$Phylum == "p__Glomeromycota", ]
+d4 <- clone(meco_datasetRZ)
+d4$tax_table <- d4$tax_table[d4$tax_table$Phylum == "p__Planctomycetota", ]
 d4$tidy_dataset()
 d4$cal_betadiv()
+# Additional
+d5 <- clone(meco_datasetRZ)
+d5$tax_table <- d5$tax_table[d5$tax_table$Phylum == "p__MBNT15", ]
+d5$tidy_dataset()
+d5$cal_betadiv()
+d6 <- clone(meco_datasetRZ)
+d6$tax_table <- d6$tax_table[d6$tax_table$Phylum == "p__Entotheonellaeota", ]
+d6$tidy_dataset()
+d6$cal_betadiv()
 # first perform mantel test
-t1 <- trans_env$new(dataset = d1, env_cols = 22:34)
-t1$cal_mantel(use_measure = "bray", partial_mantel = TRUE)
-t2 <- trans_env$new(dataset = d2, env_cols = 22:34)
-t2$cal_mantel(use_measure = "bray", partial_mantel = TRUE)
-t3 <- trans_env$new(dataset = d3, env_cols = 22:34)
-t3$cal_mantel(use_measure = "bray", partial_mantel = TRUE)
-t4 <- trans_env$new(dataset = d4, env_cols = 22:34)
-t4$cal_mantel(use_measure = "bray", partial_mantel = TRUE)
+t1 <- trans_env$new(dataset = d1, env_cols = 21:30)
+t1$cal_mantel(use_measure = "jaccard", partial_mantel = TRUE)
+t1$res_mantel
+t2 <- trans_env$new(dataset = d2, env_cols = 21:30)
+t2$cal_mantel(use_measure = "jaccard", partial_mantel = TRUE)
+t2$res_mantel
+t3 <- trans_env$new(dataset = d3, env_cols = 21:30)
+t3$cal_mantel(use_measure = "jaccard", partial_mantel = TRUE)
+t3$res_mantel
+t4 <- trans_env$new(dataset = d4, env_cols = 21:30)
+t4$cal_mantel(use_measure = "jaccard", partial_mantel = TRUE)
+t4$res_mantel
+# Additional
+t5 <- trans_env$new(dataset = d5, env_cols = 21:30)
+t5$cal_mantel(use_measure = "jaccard", partial_mantel = TRUE)
+t6 <- trans_env$new(dataset = d6, env_cols = 21:30)
+t6$cal_mantel(use_measure = "jaccard", partial_mantel = TRUE)
 # extract a part of the results 
-x1 <- data.frame(spec = "Ascomycota", t1$res_mantel) %>% .[, c(1, 3, 6, 8)]
-x2 <- data.frame(spec = "Basidiomycota", t2$res_mantel) %>% .[, c(1, 3, 6, 8)]
-x3 <- data.frame(spec = "Rozellomycota", t3$res_mantel) %>% .[, c(1, 3, 6, 8)]
-x4 <- data.frame(spec = "Glomeromycota", t4$res_mantel) %>% .[, c(1, 3, 6, 8)]
+x1 <- data.frame(spec = "Acidobacteriota", t1$res_mantel) %>% .[, c(1, 3, 6, 8)]
+x2 <- data.frame(spec = "Pseudomonadota", t2$res_mantel) %>% .[, c(1, 3, 6, 8)]
+x3 <- data.frame(spec = "Verrucomicrobiota", t3$res_mantel) %>% .[, c(1, 3, 6, 8)]
+x4 <- data.frame(spec = "Planctomycetota", t4$res_mantel) %>% .[, c(1, 3, 6, 8)]
+# Additional
+x5 <- data.frame(spec = "MBNT15", t5$res_mantel) %>% .[, c(1, 3, 6, 8)]
+x6 <- data.frame(spec = "Entotheonellaeota", t6$res_mantel) %>% .[, c(1, 3, 6, 8)]
 # rename columns
 colnames(x1) <- colnames(x2) <-colnames(x3)<-colnames(x4)<- c("spec", "env", "r", "p.value")
+# Additonal
+colnames(x5) <- colnames(x6)<- c("spec", "env", "r", "p.value")
 # generate interval data
 x1 %<>% dplyr::mutate(rd = cut(r, breaks = c(-Inf, 0.3, 0.6, Inf), labels = c("< 0.3", "0.3 - 0.6", ">= 0.6")),
                       pd = cut(p.value, breaks = c(-Inf, 0.01, 0.05, Inf), labels = c("< 0.01", "0.01 - 0.05", ">= 0.05")))
@@ -1519,21 +1686,29 @@ x3 %<>% dplyr::mutate(rd = cut(r, breaks = c(-Inf, 0.3, 0.6, Inf), labels = c("<
                       pd = cut(p.value, breaks = c(-Inf, 0.01, 0.05, Inf), labels = c("< 0.01", "0.01 - 0.05", ">= 0.05")))
 x4 %<>% dplyr::mutate(rd = cut(r, breaks = c(-Inf, 0.3, 0.6, Inf), labels = c("< 0.3", "0.3 - 0.6", ">= 0.6")),
                       pd = cut(p.value, breaks = c(-Inf, 0.01, 0.05, Inf), labels = c("< 0.01", "0.01 - 0.05", ">= 0.05")))
-# cobine the tables
+# Additional
+x5 %<>% dplyr::mutate(rd = cut(r, breaks = c(-Inf, 0.3, 0.6, Inf), labels = c("< 0.3", "0.3 - 0.6", ">= 0.6")),
+                      pd = cut(p.value, breaks = c(-Inf, 0.01, 0.05, Inf), labels = c("< 0.01", "0.01 - 0.05", ">= 0.05")))
+x6 %<>% dplyr::mutate(rd = cut(r, breaks = c(-Inf, 0.3, 0.6, Inf), labels = c("< 0.3", "0.3 - 0.6", ">= 0.6")),
+                      pd = cut(p.value, breaks = c(-Inf, 0.01, 0.05, Inf), labels = c("< 0.01", "0.01 - 0.05", ">= 0.05")))
+# combine the tables
 plot_table <- rbind(x1, x2,x3,x4)
+plot_table
+# Additional
+plot_table <- rbind(x5,x6)
 # Visualise
 set_scale()
-g1 <- quickcor(t1$data_env, type = "upper", cor.test = TRUE, show.diag = FALSE) +
+g1 <- quickcor(t4$data_env, type = "upper", cor.test = TRUE, show.diag = FALSE) +
   geom_square() +
   geom_mark(sig.thres = 0.05, markonly = TRUE, color = "black", size = 6) +
-  anno_link(aes(colour = pd, size = rd), data = plot_table) +
+  anno_link(aes(colour = pd, size = rd), data = plot_table,label.size = 3) +
   scale_size_manual(values = c(0.5, 1.5, 3)) +
   scale_colour_manual(values = c("#D95F02", "#1B9E77", "#A2A2A288")) +
   guides(size = guide_legend(title = "Mantel's r", override.aes = list(colour = "grey35"), order = 2),
          colour = guide_legend(title = "Mantel's p", override.aes = list(size = 3), order = 1),
          fill = guide_colorbar(title = "Pearson's r", order = 3))
 
-g1
+g1+labs(title = "Bacteria phyla correlation with environmental parameters")
 
 #### Further stats ####
 # see:https://chiliubio.github.io/microeco_tutorial/diversity-based-class.html
@@ -1544,13 +1719,13 @@ g1
 #### Functional assignment ####
 # Paragraph 7.2 of the tutorial (https://chiliubio.github.io/microeco_tutorial/explainable-class.html#trans_func-class)
 # create object of trans_func
-t2 <- trans_func$new(meco_datasetMPJ)
+t2 <- trans_func$new(meco_datasetRZ)
 # mapping the taxonomy to the database. This can recognize prokaryotes or fungi automatically 
 # if the names of taxonomic levels are standard.
 # for fungi example, see https://chiliubio.github.io/microeco_tutorial/other-dataset.html# fungi-data
 # default database for prokaryotes is FAPROTAX database
 # mapping
-t2$cal_spe_func(prok_database = "FUNGuild")
+t2$cal_spe_func(prok_database = "FAPROTAX")
 # return t2$res_spe_func, 1 represent trait exists, 0 represent no or cannot confirmed.
 t2$res_spe_func[1:5, 1:2]
 # The percentages of the ASVs having the same trait 
@@ -1560,47 +1735,84 @@ t2$res_spe_func[1:5, 1:2]
 t2$cal_spe_func_perc(abundance_weighted = T)
 # To see part of the result
 t2$res_spe_func_perc[1:5, 1:2]
+# Save the result
+write.table(t2$res_spe_func_perc, "FunctionBacteria.csv", row.names = TRUE)
+# We used the saved table to retrieve the mean and SD relative abundance of functional groups for each species's rhizosphere assessed
 # If you want to change the group list, reset the list t2$func_group_list
-t2$func_group_list<-list(t2$func_group_list,group=t2$sample_table$Landcover)
-t2$func_group_list
+t2$func_group_list<-list(t2$func_group_list,group=t2$sample_table$Rhizosphere)
 # To see
 t2$trans_spe_func_perc()
 t2$res_spe_func_perc_trans
 t2$plot_spe_func_perc()
+
+#### Multivariate plot with functional data ####
+# t9 is created from the FunctionFungi.csv dataset
+# t10 is created from the FunctionFungi.csv functions visible
+t9<-read.csv("FunctionBacteriaMultiPlot.csv", row.names=1)
+t10<-read.csv("Functions_names.csv", row.names=1)
+m2 <- microtable$new(sample_table = as.data.frame(meco_datasetRZ$sample_table), otu_table = as.data.frame(t(t9)), tax_table = t10)
+# Correlation for different Rhizosphere types
+m2$cal_betadiv(method = "jaccard")
+t12 <- trans_beta$new(dataset = m2, group = "Rhizosphere", measure = "jaccard")
+# PCoA, PCA and NMDS are available
+t12$cal_ordination(method = "PCA")
+# ordination result list
+class(t12$res_ordination)
+write.table(t12$res_ordination$scores, "PCAScoresFunct.csv", row.names = TRUE)
+# plot the PCoA result with confidence ellipse
+t12$plot_ordination(plot_color = "Rhizosphere",plot_type = c("point", "ellipse"))+theme_bw()+geom_text(aes(label = sample_id),vjust = -0.6)
+t12$plot_ordination(plot_color = "Rhizosphere",plot_type = c("point"))+theme_bw()+ggtitle("Functional Bacteria Rhizosphere")
+t12$res_ordination
+
 #### Functions and general network ####
 # construct a network to show the percentages of the OTUs for each trait in network modules
-network <- trans_network$new(dataset = meco_datasetMPJ, cal_cor = "base", taxa_level = "OTU", filter_thres = 0.0001, cor_method = "spearman")
+network <- trans_network$new(dataset = meco_datasetRZ, cal_cor = "base", taxa_level = "OTU", filter_thres = 0.0001, cor_method = "spearman")
 network$cal_network(p_thres = 0.01, COR_cut = 0.7)
 network$cal_module()
-soil_amp_network %<>% cal_module(undirected_method = "cluster_fast_greedy")
 # convert module info to microtable object
 meco_module <- network$trans_comm(use_col = "module")
 meco_module_func <- trans_func$new(meco_module)
-meco_module_func$cal_spe_func(prok_database = "FUNGuild")
-# Check if I want the abundance weighted or not
-meco_module_func$cal_spe_func_perc(abundance_weighted = T)
-meco_module_func$plot_spe_func_perc(order_x = paste0("M", 1:10)) + labs(title="Fungi functional groups in co-occurence networks")
+meco_module_func$cal_spe_func(prok_database = "FAPROTAX")
+meco_module_func$cal_spe_func_perc(abundance_weighted = FALSE)
+meco_module_func$plot_spe_func_perc(order_x = paste0("M", 1:10))
 # use show_prok_func to see the detailed information of traits
 # Example
 t2$show_prok_func("methanotrophy")
-
 #### Functions and environment ####
 # Correlation of the percentage data in res_spe_func_perc to environmental variables.
-Metadata<-read.table("Fungi_Metadata.csv",h=T,sep=",",row.names = 1)
-# Metadata dataset for Rhizosphere
-Metadata_Rhizosphere<-Metadata[Metadata$ProjectFocus=="Rhizosphere",]
-t3 <- trans_env$new(dataset = meco_datasetMPJ, add_data = Metadata_Rhizosphere[,21:30],complete_na = TRUE)
+Metadata<-read.table("Bacteria_Metadata.csv",h=T,sep=",",row.names = 1)
+# Metadata dataset for Field not also the Rhizosphere
+Metadata_field<-Metadata[Metadata$ProjectFocus=="Field",]
+t3 <- trans_env$new(dataset = meco_datasetRZ, add_data = Metadata_field[,21:30],complete_na = TRUE)
 # Use t2 object from function analysis. Reload if needed.
-t3$cal_cor(add_abund_table = t2$res_spe_func_perc, cor_method = "spearman",by_group = "Landcover")
-t3$res_cor
+t3$cal_cor(add_abund_table = t2$res_spe_func_perc, cor_method = "spearman",by_group = "Rhizosphere")
+list(t3$res_cor$Env)
+t3$res_cor[t3$res_cor$Taxa=="invertebrate_parasites",]
 write.table(t3$res_cor, "CorrelationFunctionsEnv.csv", sep = "t")
 # Visualise
-t3$plot_cor(xtext_angle = 90)
+t3$cal_ordination(add_sample_table = t2$res_spe_func_perc,method = "dbRDA", use_measure = "jaccard")
+names<-as.list(rownames(t(t2$res_spe_func_perc)))
+samples<-as.data.frame(t(t2$res_spe_func_perc))
+samples$names<-names
+samples$names
+t3$dataset$sample_table<-samples
+t3$cal_ordination(method = "dbRDA", use_measure = "jaccard")
+t3$res_cor
+t3$trans_ordination()
+t3$res_ordination_trans
+t3$dataset$sample_table
+t3$plot_ordination()
+t3$dataset$sample_table$methanotrophy
+colnames
+g1<-t3$plot_cor(xtext_angle = 90,ytext_size=5, xtext_size=5)
+g1+labs(title = "Bacteria functions correlation with environmental parameters")
 # t3$plot_cor(pheatmap = TRUE, main = "Fungi functional groups and environmental parameters")
-
+t3$cal_ordination()
+t3$res_ordination_trans
+t2$trans_ordination()
 #### Differential test to see different functions across groups, land cover types ####
 # First, it is better to clone the dataset
-tmp_mt <- clone(meco_datasetMPJ)
+tmp_mt <- clone(meco_datasetRZ)
 # transpose res_spe_func_perc to be a data.frame like taxonomic abundance
 str(t2$res_spe_func_perc)
 tmp <- as.data.frame(t(t2$res_spe_func_perc), check.names = FALSE)
@@ -1608,10 +1820,14 @@ tmp <- as.data.frame(t(t2$res_spe_func_perc), check.names = FALSE)
 tmp_mt$taxa_abund$func <- tmp
 tmp
 # select the "func" in taxa_abund list in trans_diff
-t2 <- trans_diff$new(dataset = tmp_mt, method = "anova", group = "Landcover", taxa_level = "func")
+t4 <- trans_diff$new(dataset = tmp_mt, method = "KW_dunn", group = "Rhizosphere", taxa_level = "func")
 # See results of relative abundance
-t2$res_abund
-write.csv(t2$res_abund, file = "abundance_table.csv")
-# See anova results
-t2$res_diff
-t2$plot_diff_abund(add_sig = TRUE) + ggplot2::ylab("Relative abundance (%)")+ggplot2::labs(title = "Fungi functional groups")
+t4$res_abund
+write.csv(t4$res_abund, file = "BactFunctAbundance_table.csv")
+# See KW results
+t4$res_diff
+write.csv(t4$res_diff, file = "KWFunction_table.csv")
+# Select 9 taxa to display, see results obtained before with t4$res_abund + nitrogen fixation
+Taxamostlyabundant<-c("chemoheterotrophy","aerobic_chemoheterotrophy","dark_hydrogen_oxidation","anaerobic_chemoheterotrophy",
+                      "animal_parasites_or_symbionts","cellulolysis","nitrate_reduction","sulfate_respiration", "nitrogen_fixation")
+t4$plot_diff_abund (y_start = 0.05, y_increase = 0.1, select_taxa = Taxamostlyabundant)+ggplot2::labs(title = "Bacteria functional groups")

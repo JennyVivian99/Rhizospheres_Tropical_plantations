@@ -282,7 +282,7 @@ out<-vegan::rarecurve(asv_before_BulkRhizo1_2YO, step=100,lwd=2, ylab="ASV Richn
 set.seed(100)
 # Rarefy the samples without replacement. 
 # Rarefaction is used to simulate an even number of reads per sample. 
-ps_rarefiedBulkRhizo1_2YO <- rarefy_even_depth(ps_BulkRhizo2YO, sample.size =   63341 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+ps_rarefiedBulkRhizo1_2YO <- rarefy_even_depth(ps_BulkRhizo1_2YO, sample.size =   63341 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
 # Allocation of objects after rarefying
 asv_counts_rarefiedBulkRhizo1_2YO <- as.matrix(otu_table(ps_rarefiedBulkRhizo1_2YO))
 After_rar_sequence_readsBulkRhizo1_2YO <- sum(asv_counts_rarefiedBulkRhizo1_2YO)
@@ -295,6 +295,19 @@ summarize_phyloseq(ps_rarefiedBulkRhizo1_2YO)
 ps_rarefiedBulkRhizo1_2YO
 # Check the structure
 str(sample_data(ps_rarefiedBulkRhizo1_2YO))
+# For publications is useful:
+otu_counts <- as.matrix(otu_table(ps_rarefiedBulkRhizo1_2YO))
+total_sequence_reads <- sum(otu_counts)
+total_sequence_reads
+num_asvs <- ntaxa(ps_rarefiedBulkRhizo1_2YO)
+num_asvs
+
+# 1. Take the object that has 63,341 reads
+# 2. Convert to a data frame (Transposed: Samples as Columns)
+final_otu_export <- as.data.frame(otu_table(ps_rarefiedBulkRhizo1_2YO))
+
+# 3. Save with a UNIQUE name
+write.csv(final_otu_export, "feature_table.csv")
 
 #### Processing sample-rarefying for each of the BulkRhizo2YO dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
@@ -312,7 +325,8 @@ out<-vegan::rarecurve(asv_before_BulkRhizo2YO, step=100,lwd=2, ylab="ASV Richnes
 set.seed(100)
 # Rarefy the samples without replacement. 
 # Rarefaction is used to simulate an even number of reads per sample. 
-ps_rarefiedBulkRhizo2YO <- rarefy_even_depth(ps_BulkRhizo2YO, sample.size =   70842 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+#ps_rarefiedBulkRhizo2YO <- rarefy_even_depth(ps_BulkRhizo2YO, sample.size =   70842 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+ps_rarefiedBulkRhizo2YO <- rarefy_even_depth(ps_BulkRhizo2YO, sample.size =   63341 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
 # Allocation of objects after rarefying
 asv_counts_rarefiedBulkRhizo2YO <- as.matrix(otu_table(ps_rarefiedBulkRhizo2YO))
 After_rar_sequence_readsBulkRhizo2YO <- sum(asv_counts_rarefiedBulkRhizo2YO)
@@ -325,6 +339,14 @@ summarize_phyloseq(ps_rarefiedBulkRhizo2YO)
 ps_rarefiedBulkRhizo2YO
 # Check the structure
 str(sample_data(ps_rarefiedBulkRhizo2YO))
+
+# 1. Take the object that has 63,341 reads
+# 2. Convert to a data frame (Transposed: Samples as Columns)
+final_otu_export <- as.data.frame(otu_table(ps_rarefiedBulkRhizo2YO))
+
+# 3. Save with a UNIQUE name
+write.csv(final_otu_export, "features_table2yoFunghi.csv")
+
 
 #### Processing sample-rarefying for each of the BulkRhizo10YO dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
@@ -356,4 +378,9 @@ ps_rarefiedBulkRhizo10YO
 # Check the structure
 str(sample_data(ps_rarefiedBulkRhizo10YO))
 
+# 1. Take the object that has 63,341 reads
+# 2. Convert to a data frame (Transposed: Samples as Columns)
+final_otu_export <- as.data.frame(otu_table(ps_rarefiedBulkRhizo10YO))
 
+# 3. Save with a UNIQUE name
+write.csv(final_otu_export, "features_table10yoFunghi.csv")

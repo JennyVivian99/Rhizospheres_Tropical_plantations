@@ -18,7 +18,7 @@ set.seed(100)
 
 #### Load data and clean ####
 
-otu_dataBulk <- read.csv("feature_table.csv")
+otu_dataBulk <- read.csv("features_table10yoBacteria.csv")
 nrow(otu_dataBulk)
 summary(otu_dataBulk)
 otu_dataRhizosphere <- read.csv("feature_tableR.csv")
@@ -43,6 +43,26 @@ nrow(taxa_dataBulk)
 taxa_dataRhizosphere <- read.csv("tax_tableR.csv")
 taxaAll<-merge(taxa_dataBulk,taxa_dataRhizosphere,by = "ID", all = TRUE)
 nrow(taxaAll)
+
+# 1. Ensure all NAs are 0 (in case the previous step missed any)
+otuAll[is.na(otuAll)] <- 0
+
+# 2. Identify numeric columns
+numeric_cols <- sapply(otuAll, is.numeric)
+
+# 3. Sum with na.rm = TRUE just to be safe
+sample_totals <- colSums(otuAll[, numeric_cols], na.rm = TRUE)
+
+# 4. View the results - are they numbers now?
+print(sample_totals)
+
+# 5. Check uniqueness again (properly)
+if(any(is.na(sample_totals))) {
+  print("Wait, sums are still NA. Check: is.numeric(otuAll[,1])")
+} else {
+  print(paste("Number of unique depths:", length(unique(sample_totals))))
+  print(paste("Actual depths found:", paste(unique(sample_totals), collapse = ", ")))
+}
 
 # Make the first column the name of the rows
 rownames(taxaAll) <- taxaAll$ID
@@ -259,7 +279,7 @@ genus_aggregated <- merged_data %>%
   # Group by the Genus name
   group_by(Genus) %>%
   # Sum the counts for all numeric columns (the samples)
-  summarise(across(where(is.numeric), sum))
+  dplyr::summarise(across(where(is.numeric), sum))
 # Format for IndVal (Samples x Genera)
 # Move Genus names back to row names and transpose
 genus_matrix <- as.data.frame(genus_aggregated)

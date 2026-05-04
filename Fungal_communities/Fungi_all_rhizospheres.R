@@ -259,6 +259,11 @@ ps_MainPJ <- subset_samples(ps_DE, ProjectFocus == "Field")
 # Rhizosphere (RZ)
 ps_Rhizosphere <- subset_samples(ps_DE, ProjectFocus == "Rhizosphere")
 
+#try
+library(ranacapa)
+ggrare(ps_Rhizosphere, step = 100, label = NULL, color = NULL,
+       plot = TRUE, parallel = FALSE, se = TRUE)
+
 #### Processing sample-rarefying for each of the working dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
 # (done for Main Project)
@@ -270,7 +275,7 @@ sample_sums(ps_Rhizosphere)[order(sample_sums(ps_Rhizosphere))]
 # Minimum to retain: 33404
 # To display the plots to recognize better were to cut:
 asv_before_Rhizosphere <- as(otu_table(ps_Rhizosphere), "matrix")
-out<-vegan::rarecurve(asv_before_Rhizosphere, step=100,lwd=2, ylab="ASV Richness", xlab="Sequence Sample Size", main="INSERT_GENE_TARGET rRNA", label=F)
+out<-vegan::rarecurve(t(asv_before_Rhizosphere), step=100,lwd=2, ylab="ASV Richness", xlab="Sequence Sample Size", main="INSERT_GENE_TARGET rRNA", label=F)
 # Set seed to reproduce the data, since the rarefaction will sample
 set.seed(100)
 # Rarefy the samples without replacement. 

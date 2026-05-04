@@ -189,7 +189,7 @@ path_results<-getwd()
 #Create the other objects that will be filled later
 seqtab.nochim = readRDS(paste0(path_results,"/seqtab.nochim.rds"))
 colnames(seqtab.nochim) <-md5(colnames(seqtab.nochim))
-taxa <- read.csv("NAME_OF_DADA2_FILE.csv",header= TRUE, row.names=1) %>% as.matrix()
+taxa <- read.csv("Jenny_16S_taxa_DADA2.csv",header= TRUE, row.names=1) %>% as.matrix()
 
 #Upload the table with the metadata
 Metadata<-read.table("Bacteria_Metadata.csv",h=T,sep=",", row.names = 1)
@@ -263,6 +263,7 @@ ps_BulkRhizo2YO<-subset_samples(ps_DE, original_sample_id %in% c("E2NA", "E2NB",
 # Bulk only for BulkRhizo10YO comparison in 10yo plantation (only I1 transect)
 ps_BulkRhizo10YO<-subset_samples(ps_DE, original_sample_id %in% c("I1SA", "I1SB", "I1SC", "I1SD"))
 
+
 #### Processing sample-rarefying for the BulkRhizo1_2YO working dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
 # (done for Rhizosphere)
@@ -279,7 +280,7 @@ set.seed(100)
 # Rarefy the samples without replacement. Now I write the lowest number of the ASVs sequences
 # to retain them all: 38483, or just don't trim
 # Rarefaction is used to simulate an even number of reads per sample. 
-ps_rarefiedBulkRhizo1_2YO <- rarefy_even_depth(ps_BulkRhizo1_2YO, replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+ps_rarefiedBulkRhizo1_2YO <- rarefy_even_depth(ps_BulkRhizo1_2YO, sample.size =   38483 , replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
 # Allocation of objects after rarefying
 asv_counts_rarefiedBulkRhizo1_2YO <- as.matrix(otu_table(ps_rarefiedBulkRhizo1_2YO))
 After_rar_sequence_readsBulkRhizo1_2YO <- sum(asv_counts_rarefiedBulkRhizo1_2YO)
@@ -300,6 +301,13 @@ total_sequence_reads
 num_asvs <- ntaxa(ps_rarefiedBulkRhizo1_2YO)
 num_asvs
 
+# 1. Take the object that has 63,341 reads
+# 2. Convert to a data frame (Transposed: Samples as Columns)
+final_otu_export <- as.data.frame(otu_table(ps_rarefiedBulkRhizo1_2YO))
+
+# 3. Save with a UNIQUE name
+write.csv(final_otu_export, "feature_table.csv")
+
 #### Processing sample-rarefying for the BulkRhizo2YO working dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
 # (done for Rhizosphere)
@@ -316,7 +324,7 @@ set.seed(100)
 # Rarefy the samples without replacement. Now I write the lowest number of the ASVs sequences
 # to retain them all: 47665, or just don't trim
 # Rarefaction is used to simulate an even number of reads per sample. 
-ps_rarefiedBulkRhizo2YO <- rarefy_even_depth(ps_BulkRhizo2YO, replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+ps_rarefiedBulkRhizo2YO <- rarefy_even_depth(ps_BulkRhizo2YO, sample.size =   38483 ,replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
 # Allocation of objects after rarefying
 asv_counts_rarefiedBulkRhizo2YO <- as.matrix(otu_table(ps_rarefiedBulkRhizo2YO))
 After_rar_sequence_readsBulkRhizo2YO <- sum(asv_counts_rarefiedBulkRhizo2YO)
@@ -337,6 +345,13 @@ total_sequence_reads
 num_asvs <- ntaxa(ps_rarefiedBulkRhizo2YO)
 num_asvs
 
+# 1. Take the object that has 63,341 reads
+# 2. Convert to a data frame (Transposed: Samples as Columns)
+final_otu_export <- as.data.frame(otu_table(ps_rarefiedBulkRhizo2YO))
+
+# 3. Save with a UNIQUE name
+write.csv(final_otu_export, "features_table2yoBacteria.csv")
+
 #### Processing sample-rarefying for the BulkRhizo10YO working dataset #### 
 # This step is done to ensure that the samples are comparable, having equal readings-depth
 # (done for Rhizosphere)
@@ -353,7 +368,7 @@ set.seed(100)
 # Rarefy the samples without replacement. Now I write the lowest number of the ASVs sequences
 # to retain them all: 38483, or just don't trim
 # Rarefaction is used to simulate an even number of reads per sample. 
-ps_rarefiedBulkRhizo10YO <- rarefy_even_depth(ps_BulkRhizo10YO, replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
+ps_rarefiedBulkRhizo10YO <- rarefy_even_depth(ps_BulkRhizo10YO,sample.size =   38483, replace = FALSE, trimOTUs = TRUE, verbose = TRUE)
 # Allocation of objects after rarefying
 asv_counts_rarefiedBulkRhizo10YO <- as.matrix(otu_table(ps_rarefiedBulkRhizo10YO))
 After_rar_sequence_readsBulkRhizo10YO <- sum(asv_counts_rarefiedBulkRhizo10YO)
@@ -374,3 +389,9 @@ total_sequence_reads
 num_asvs <- ntaxa(ps_rarefiedBulkRhizo10YO)
 num_asvs
 
+# 1. Take the object that has 63,341 reads
+# 2. Convert to a data frame (Transposed: Samples as Columns)
+final_otu_export <- as.data.frame(otu_table(ps_rarefiedBulkRhizo10YO))
+
+# 3. Save with a UNIQUE name
+write.csv(final_otu_export, "features_table10yoBacteria.csv")
